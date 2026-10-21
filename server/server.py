@@ -14,7 +14,7 @@ Environment:
     HOST                default 127.0.0.1 (only this computer). Use 0.0.0.0 to reach it from your phone,
                         and set APP_TOKEN when you do.
     APP_TOKEN           if set, every /api call must send "Authorization: Bearer <APP_TOKEN>"
-    DATA_DIR            where the session and portfolio are saved (default: dividends/data)
+    DATA_DIR            where the session and portfolio are saved (default: data/ in the project)
     TZ                  the time zone the daily sync time is read in (default: the machine's)
 """
 
@@ -381,7 +381,7 @@ def make_handler(app: App):
             if not path.is_file() or DIST.resolve() not in path.parents:
                 path = DIST / "index.html"
             if not path.is_file():
-                body = b"Web app not built yet. Run: npm install && npm run build (in the dividends folder)."
+                body = b"Web app not built yet. Run: npm install && npm run build (in the project folder)."
                 self.send_response(HTTPStatus.SERVICE_UNAVAILABLE)
                 self.send_header("Content-Type", "text/plain")
                 self.end_headers()

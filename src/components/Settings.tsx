@@ -133,7 +133,7 @@ export function Settings({ s }: { s: Store }) {
         {mode === 'local' && (
           <div className="form">
             <p>Robinhood sync runs through a small server you run yourself, which links your account with Plaid. This page isn't connected to one.</p>
-            <pre className="code">cd dividends{'\n'}npm install && npm run build{'\n'}PLAID_CLIENT_ID=… PLAID_SECRET=… python3 server/server.py</pre>
+            <pre className="code">npm install && npm run build{'\n'}PLAID_CLIENT_ID=… PLAID_SECRET=… python3 server/server.py</pre>
             <p className="muted small">Then open http://127.0.0.1:8787. Until then you can explore with the sample data, import a CSV, or add holdings by hand.</p>
           </div>
         )}

@@ -46,7 +46,7 @@ async function call<T>(method: string, path: string, body?: unknown, timeoutMs =
   }
 }
 
-/** Thrown when the page isn't served by the Python server (e.g. the GitHub Pages demo). */
+/** Thrown when the page isn't served by the Python server (e.g. a static copy of the build). */
 export class NoServer extends Error {
   constructor() { super('No sync server'); }
 }

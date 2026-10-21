@@ -1,0 +1,23 @@
+name: CI
+
+# Web logic (Vitest), the Python sync server (unittest, against fake Plaid and Robinhood APIs), and a production build.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: npm ci
+      - run: npm test
+      - run: npm run build

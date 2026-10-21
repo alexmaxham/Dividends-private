@@ -19,7 +19,7 @@ Linking and the daily update run on a small server you host yourself. It uses on
 1. Create a free account at https://dashboard.plaid.com. Under **Developers → Keys**, copy your client ID and the **Sandbox** secret.
 2. Build and start:
    ```bash
-   cd dividends
+   git clone https://github.com/alexmaxham/dividends.git && cd dividends
    npm install && npm run build
    PLAID_CLIENT_ID=your-id PLAID_SECRET=your-sandbox-secret python3 server/server.py   # http://127.0.0.1:8787
    ```
@@ -51,7 +51,7 @@ Settings (environment variables):
 | `PORT` | `8787` | |
 | `HOST` | `127.0.0.1` | Set to `0.0.0.0` to open it from your phone on the same network. |
 | `APP_TOKEN` | none | Required for every API call when set. **Set it whenever `HOST` isn't localhost**, then enter it in Settings. |
-| `DATA_DIR` | `dividends/data` | Holds Plaid access tokens (`plaid.json`, readable by its owner only) and the synced portfolio. |
+| `DATA_DIR` | `data/` in the project | Holds Plaid access tokens (`plaid.json`, readable by its owner only) and the synced portfolio. |
 | `TZ` | machine's | The time zone the daily sync time is read in. |
 
 ### Security
@@ -65,7 +65,7 @@ If the server starts without Plaid keys, **Connect Robinhood** signs in to Robin
 
 ## Without the server
 
-When the page isn't served by the sync server (for example the GitHub Pages copy at `/Claude/dividends/`), it runs on its own and saves to this browser:
+When the page isn't served by the sync server (for example `npm run dev` without the server, or a static copy of `dist/`), it runs on its own and saves to this browser:
 
 - It starts with a **sample portfolio** so you can look around.
 - **Import CSV** takes Robinhood's account activity report (Account → Reports and statements; rows coded `CDIV` become dividends) or a holdings list with `Symbol`, `Shares`, `Average Cost` and `Price` columns.
