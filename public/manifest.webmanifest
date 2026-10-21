@@ -1,0 +1,9 @@
+{
+  "name": "Dividends",
+  "short_name": "Dividends",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#070b1a",
+  "theme_color": "#070b1a",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
