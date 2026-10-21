@@ -19,7 +19,7 @@ Linking and the daily update run on a small server you host yourself. It uses on
 1. Create a free account at https://dashboard.plaid.com. Under **Developers → Keys**, copy your client ID and the **Sandbox** secret.
 2. Build and start:
    ```bash
-   git clone https://github.com/alexmaxham/dividends.git && cd dividends
+   git clone https://github.com/alexmaxham/Dividends-private.git dividends && cd dividends
    npm install && npm run build
    PLAID_CLIENT_ID=your-id PLAID_SECRET=your-sandbox-secret python3 server/server.py   # http://127.0.0.1:8787
    ```
