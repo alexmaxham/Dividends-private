@@ -63,6 +63,14 @@ Settings (environment variables):
 
 If the server starts without Plaid keys, **Connect Robinhood** signs in to Robinhood directly: you enter your email and password in the page (they go to your server, then Robinhood, and aren't saved). This uses Robinhood's private website API (the one the open-source robin_stocks project documents), so it can break when Robinhood changes it, and it isn't affiliated with Robinhood. Plaid is the recommended way.
 
+## Web app
+
+Every push to `main` publishes the app to GitHub Pages at **https://alexmaxham.github.io/Dividends-private/** (`.github/workflows/pages.yml`). It's installable: on iPhone, open it in Safari and choose Share → Add to Home Screen; in Chrome or Edge, use the install icon in the address bar. It also opens offline.
+
+The hosted copy has no server behind it, so it works as described below; Robinhood sync needs the server.
+
+One-time setup: in the repository's **Settings → Pages**, set **Source** to **GitHub Actions**.
+
 ## Without the server
 
 When the page isn't served by the sync server (for example `npm run dev` without the server, or a static copy of `dist/`), it runs on its own and saves to this browser:
