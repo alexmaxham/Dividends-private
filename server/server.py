@@ -1,8 +1,15 @@
-"""Dividend tracker server: serves the web app, keeps the Robinhood session, and syncs once a day.
+"""Dividend tracker server: serves the web app, keeps brokerage connections, and syncs once a day.
 
-    python3 server/server.py            # http://127.0.0.1:8787
+    PLAID_CLIENT_ID=... PLAID_SECRET=... python3 server/server.py      # http://127.0.0.1:8787
+
+Accounts connect through Plaid Link, so people sign in on Plaid's and Robinhood's own screens and this server
+only keeps Plaid's access token. Without Plaid keys it falls back to signing in to Robinhood directly.
 
 Environment:
+    PLAID_CLIENT_ID     from dashboard.plaid.com → Developers → Keys
+    PLAID_SECRET        the secret for PLAID_ENV
+    PLAID_ENV           sandbox (default, test logins only) or production
+    PLAID_REDIRECT_URI  optional; an https URL registered with Plaid, needed for OAuth sign-in on phones
     PORT                default 8787
     HOST                default 127.0.0.1 (only this computer). Use 0.0.0.0 to reach it from your phone,
                         and set APP_TOKEN when you do.
@@ -18,6 +25,7 @@ import hmac
 import json
 import mimetypes
 import os
+import secrets
 import sys
 import threading
 import time
@@ -28,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent))
+from plaid import Plaid, PlaidError, merge_portfolios  # noqa: E402
 from robinhood import Client, RobinhoodError  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -38,7 +47,7 @@ HISTORY_DAYS = 3 * 365
 
 
 class Store:
-    """JSON files in DATA_DIR. The session file holds Robinhood tokens, so it's readable by its owner only."""
+    """JSON files in DATA_DIR. Files with access tokens (plaid.json, session.json) are readable by their owner only."""
 
     def __init__(self, directory: Path):
         self.dir = directory
@@ -61,13 +70,79 @@ class Store:
 
 
 class App:
-    def __init__(self, store: Store, client: Client | None = None):
+    def __init__(self, store: Store, client: Client | None = None, plaid: Plaid | None = None, use_env: bool = True):
         self.store = store
         self.settings = {"syncTime": "18:30", "autoSync": True, **store.read("settings.json", {})}
         self.state = store.read("state.json", {"lastSync": None, "lastError": None, "instruments": {}})
+        self.plaid = plaid or (Plaid.from_env() if use_env else None)
+        self.links = store.read("plaid.json", {"userId": secrets.token_hex(8), "items": []})
         self.client = client or Client(store.read("session.json", None), on_session_change=self._save_session)
         self.sync_lock = threading.Lock()
         self.syncing = False
+
+    @property
+    def provider(self) -> str:
+        return "plaid" if self.plaid else "robinhood"
+
+    @property
+    def connected(self) -> bool:
+        return bool(self.links["items"]) if self.plaid else self.client.connected
+
+    def _save_links(self) -> None:
+        self.store.write("plaid.json", self.links, private=True)
+
+    def _item(self, item_id: str) -> dict:
+        for it in self.links["items"]:
+            if it["itemId"] == item_id:
+                return it
+        raise ValueError("That account isn't linked.")
+
+    # ───────────── Plaid Link ─────────────
+
+    def _require_plaid(self) -> Plaid:
+        if not self.plaid:
+            raise ValueError("Plaid isn't set up on this server. Start it with PLAID_CLIENT_ID and PLAID_SECRET.")
+        return self.plaid
+
+    def link_token(self, item_id: str | None = None) -> dict:
+        plaid = self._require_plaid()
+        access = self._item(item_id)["accessToken"] if item_id else None
+        return {"linkToken": plaid.link_token(self.links["userId"], access)}
+
+    def link_exchange(self, public_token: str, institution: dict | None) -> dict:
+        plaid = self._require_plaid()
+        tokens = plaid.exchange(public_token)
+        inst = institution or {}
+        self.links["items"].append({
+            "itemId": tokens["item_id"], "accessToken": tokens["access_token"],
+            "institution": inst.get("name") or "Brokerage", "institutionId": inst.get("institution_id") or inst.get("id"),
+            "linkedAt": dt.datetime.now().astimezone().isoformat(), "needsReauth": False,
+        })
+        self._save_links()
+        return self.status()
+
+    def link_repaired(self, item_id: str) -> dict:
+        self._item(item_id)["needsReauth"] = False
+        self._save_links()
+        return self.status()
+
+    def unlink(self, item_id: str) -> dict:
+        item = self._item(item_id)
+        try:
+            self._require_plaid().remove(item["accessToken"])
+        except (PlaidError, OSError) as e:  # still forget it locally; the user asked to disconnect
+            log(f"Plaid item/remove failed: {e}")
+        self.links["items"] = [it for it in self.links["items"] if it["itemId"] != item_id]
+        self._save_links()
+        return self.status()
+
+    def disconnect(self) -> dict:
+        if self.plaid:
+            for it in list(self.links["items"]):
+                self.unlink(it["itemId"])
+        else:
+            self.client.logout()
+        return self.status()
 
     def _save_session(self, session: dict) -> None:
         self.store.write("session.json", session, private=True)
@@ -78,7 +153,7 @@ class App:
     # ───────────── Status & settings ─────────────
 
     def next_sync(self, now: dt.datetime | None = None) -> str | None:
-        if not (self.client.connected and self.settings["autoSync"]):
+        if not (self.connected and self.settings["autoSync"]):
             return None
         now = now or dt.datetime.now()
         hh, mm = (int(x) for x in self.settings["syncTime"].split(":"))
@@ -100,8 +175,12 @@ class App:
     def status(self) -> dict:
         return {
             "server": True,
-            "connected": self.client.connected,
-            "username": self.client.session.get("username"),
+            "provider": self.provider,
+            "plaidEnv": self.plaid.env if self.plaid else None,
+            "connected": self.connected,
+            "username": None if self.plaid else self.client.session.get("username"),
+            "accounts": [{k: it.get(k) for k in ("itemId", "institution", "linkedAt", "needsReauth")} for it in self.links["items"]]
+            if self.plaid else [],
             "syncing": self.syncing,
             "lastSync": self.state.get("lastSync"),
             "lastError": self.state.get("lastError"),
@@ -126,8 +205,11 @@ class App:
 
     def due(self, now: dt.datetime | None = None) -> bool:
         now = now or dt.datetime.now()
-        if not (self.client.connected and self.settings["autoSync"]) or self.syncing:
+        if not (self.connected and self.settings["autoSync"]) or self.syncing:
             return False
+        retry = self.state.get("retryAt")
+        if retry and now.astimezone() >= dt.datetime.fromisoformat(retry):
+            return True
         hh, mm = (int(x) for x in self.settings["syncTime"].split(":"))
         slot = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
         if now >= slot:
@@ -137,23 +219,28 @@ class App:
         return not last or (now.astimezone() - dt.datetime.fromisoformat(last)) > dt.timedelta(hours=26)
 
     def sync(self) -> dict:
-        if not self.client.connected:
-            raise RobinhoodError("Connect Robinhood first.")
+        if not self.connected:
+            raise ValueError("Connect your Robinhood account first.")
         if not self.sync_lock.acquire(blocking=False):
-            raise RobinhoodError("A sync is already running.")
+            raise ValueError("A sync is already running.")
         self.syncing = True
         try:
-            data = self.client.fetch_portfolio(self.state.setdefault("instruments", {}))
             previous = self.store.read("portfolio.json", {})
             now = dt.datetime.now().astimezone()
+            note = None
+            if self.plaid:
+                data, note = self._fetch_plaid(previous, now.date())
+            else:
+                data = self.client.fetch_portfolio(self.state.setdefault("instruments", {}))
             value = sum(h["shares"] * h["price"] for h in data["holdings"])
             cost = sum(h["shares"] * h["avgCost"] for h in data["holdings"])
             history = [s for s in previous.get("history", []) if s["date"] != now.date().isoformat()]
             history.append({"date": now.date().isoformat(), "value": round(value, 2), "cost": round(cost, 2)})
             history = history[-HISTORY_DAYS:]
-            portfolio = {**data, "history": history, "source": "robinhood", "syncedAt": now.isoformat()}
+            portfolio = {**data, "history": history, "source": self.provider, "syncedAt": now.isoformat()}
             self.store.write("portfolio.json", portfolio, private=True)
-            self.state.update(lastSync=now.isoformat(), lastError=None)
+            retry = (now + dt.timedelta(minutes=10)).isoformat() if note and "still" in note else None
+            self.state.update(lastSync=now.isoformat(), lastError=note, retryAt=retry)
             self._save_state()
             return portfolio
         except Exception as e:
@@ -166,6 +253,26 @@ class App:
         finally:
             self.syncing = False
             self.sync_lock.release()
+
+    def _fetch_plaid(self, previous: dict, today: dt.date) -> tuple[dict, str | None]:
+        parts, problems, loading = [], [], False
+        for it in self.links["items"]:
+            try:
+                part = self.plaid.fetch_item(it["accessToken"], it["itemId"], today)
+            except PlaidError as e:
+                if e.code in ("ITEM_LOGIN_REQUIRED", "PENDING_EXPIRATION", "PENDING_DISCONNECT"):
+                    it["needsReauth"] = True
+                    self._save_links()
+                    problems.append(f"{it['institution']} needs you to sign in again (Settings → Reconnect).")
+                    continue
+                raise
+            loading = loading or not part["historyReady"]
+            parts.append(part)
+        if not parts:
+            raise ValueError(" ".join(problems) or "No linked accounts returned data.")
+        if loading:
+            problems.append("Plaid is still gathering your dividend history; it'll appear on a sync in a few minutes.")
+        return merge_portfolios(parts, previous, today.isoformat()), " ".join(problems) or None
 
     def scheduler(self, stop: threading.Event) -> None:
         while not stop.wait(30):
@@ -235,6 +342,19 @@ def make_handler(app: App):
                     return self.send_json(app.store.read("portfolio.json", None))
                 if (method, route) == ("PUT", "/api/settings"):
                     return self.send_json(app.update_settings(self.body()))
+                if (method, route) == ("POST", "/api/plaid/link-token"):
+                    return self.send_json(app.link_token(self.body().get("itemId")))
+                if (method, route) == ("POST", "/api/plaid/exchange"):
+                    b = self.body()
+                    if not b.get("publicToken"):
+                        raise ValueError("Missing publicToken")
+                    return self.send_json(app.link_exchange(b["publicToken"], b.get("institution")))
+                if (method, route) == ("POST", "/api/plaid/repaired"):
+                    return self.send_json(app.link_repaired(self.body().get("itemId", "")))
+                if (method, route) == ("POST", "/api/plaid/remove"):
+                    return self.send_json(app.unlink(self.body().get("itemId", "")))
+                if route.startswith("/api/robinhood/") and route != "/api/robinhood/logout" and app.plaid:
+                    raise ValueError("This server connects through Plaid; direct Robinhood sign-in is turned off.")
                 if (method, route) == ("POST", "/api/robinhood/login"):
                     b = self.body()
                     if not b.get("username") or not b.get("password"):
@@ -242,16 +362,15 @@ def make_handler(app: App):
                     return self.send_json(app.client.login(b["username"], b["password"], b.get("mfaCode") or None))
                 if (method, route) == ("POST", "/api/robinhood/verify"):
                     return self.send_json(app.client.submit_challenge(self.body().get("code") or None))
-                if (method, route) == ("POST", "/api/robinhood/logout"):
-                    app.client.logout()
-                    return self.send_json(app.status())
+                if (method, route) in (("POST", "/api/robinhood/logout"), ("POST", "/api/disconnect")):
+                    return self.send_json(app.disconnect())
                 if (method, route) == ("POST", "/api/sync"):
                     return self.send_json(app.sync())
                 self.send_json({"error": "Not found"}, 404)
-            except (RobinhoodError, ValueError) as e:
+            except (RobinhoodError, PlaidError, ValueError) as e:
                 self.send_json({"error": str(e)}, 400)
             except OSError as e:
-                self.send_json({"error": f"Couldn't reach Robinhood: {e}"}, 502)
+                self.send_json({"error": f"Couldn't reach {app.provider.capitalize()}: {e}"}, 502)
             except Exception as e:  # pragma: no cover - logged for debugging
                 traceback.print_exc()
                 self.send_json({"error": f"Unexpected error: {e}"}, 500)
@@ -290,6 +409,8 @@ def main() -> None:
     threading.Thread(target=app.scheduler, args=(stop,), daemon=True).start()
     server = ThreadingHTTPServer((host, port), make_handler(app))
     log(f"Dividend tracker on http://{host}:{port}  (data in {DATA_DIR})")
+    log(f"connections: Plaid ({app.plaid.env})" if app.plaid else
+        "connections: direct Robinhood sign-in (set PLAID_CLIENT_ID and PLAID_SECRET to use Plaid instead)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

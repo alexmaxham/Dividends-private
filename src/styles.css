@@ -150,7 +150,7 @@ h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
 .tabs a:hover { color: var(--ink-1); background: var(--fill-hover); }
 .tabs a.on { color: var(--ink-1); background: var(--fill-chip); box-shadow: inset 0 1px 0 var(--sheen), 0 2px 10px -4px rgba(0, 0, 0, 0.4); }
 .top-actions { display: flex; align-items: center; gap: 8px; }
-.sync-pill { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 13px; font-weight: 550; color: var(--ink-2); }
+.sync-pill { display: flex; align-items: center; gap: 8px; padding: 7px 12px; white-space: nowrap; font-size: 13px; font-weight: 550; color: var(--ink-2); }
 .sync-pill:disabled { cursor: default; }
 .icon-btn { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 999px; background: none; border: 0; color: var(--ink-2); }
 .icon-btn.glass-chip { border: 1px solid var(--edge); }
@@ -389,7 +389,7 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ───────────── Responsive ───────────── */
-@media (max-width: 1080px) {
+@media (max-width: 1180px) {
   .tabs a span { display: none; }
   .tabs a { padding: 8px 11px; }
 }
@@ -450,3 +450,9 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 .outlook b { font-size: 20px; letter-spacing: -0.02em; }
 .outlook .accent { color: var(--accent); }
 .outlook-note { margin: 14px 0 0; }
+
+/* Plaid connection */
+.trust { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 16px; background: color-mix(in srgb, var(--up) 10%, transparent); border: 1px solid color-mix(in srgb, var(--up) 25%, transparent); }
+.trust > svg { color: var(--up); flex: none; margin-top: 1px; }
+.trust p { margin: 4px 0 0; }
+.status-dot.warn { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 25%, transparent); }

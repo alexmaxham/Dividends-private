@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { FREQ_LABEL, pct, shares as fmtShares, signedPct } from '../lib/format';
-import type { Holding, HoldingStats } from '../lib/types';
+import { isSynced, type Holding, type HoldingStats } from '../lib/types';
 import type { Store } from '../useStore';
 import { Card, Empty, Icon, Modal, Money, Ticker } from './ui';
 
@@ -20,7 +20,7 @@ export function Holdings({ s, openHolding }: { s: Store; openHolding: (sym: stri
   const [sort, setSort] = useState<{ key: Key; dir: 1 | -1 }>({ key: 'value', dir: -1 });
   const [onlyPaying, setOnlyPaying] = useState(false);
   const [editing, setEditing] = useState<Holding | 'new' | null>(null);
-  const editable = s.portfolio.source !== 'robinhood';
+  const editable = !isSynced(s.portfolio);
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();

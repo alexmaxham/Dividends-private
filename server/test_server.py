@@ -186,7 +186,7 @@ class AppTests(unittest.TestCase):
         self.store = Store(Path(self.tmp.name))
         client = Client({"access_token": "AT", "refresh_token": "RT", "expires_at": time.time() + 7 * 86400},
                         transport=FakeRobinhood(portfolio_routes()))
-        self.app = App(self.store, client)
+        self.app = App(self.store, client, use_env=False)
 
     def tearDown(self):
         self.tmp.cleanup()

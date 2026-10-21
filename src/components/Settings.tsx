@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
-import { api } from '../lib/api';
+import { api, type ServerStatus } from '../lib/api';
 import { importCsv } from '../lib/csv';
 import { download } from '../lib/csv';
 import { demoPortfolio } from '../lib/demo';
-import { relativeTime } from '../lib/format';
+import { dateLong, relativeTime } from '../lib/format';
+import { openPlaidLink } from '../lib/plaidLink';
+import { isSynced } from '../lib/types';
 import type { Portfolio } from '../lib/types';
 import type { Store } from '../useStore';
 import { Connect } from './Connect';
@@ -16,7 +18,8 @@ export function Settings({ s }: { s: Store }) {
   const [tokenDraft, setTokenDraft] = useState(settings.apiToken);
   const csvRef = useRef<HTMLInputElement>(null);
   const backupRef = useRef<HTMLInputElement>(null);
-  const fromRobinhood = s.portfolio.source === 'robinhood';
+  const fromRobinhood = isSynced(s.portfolio);
+  const [linking, setLinking] = useState(false);
 
   const onCsv = async (file: File) => {
     try {
@@ -56,7 +59,29 @@ export function Settings({ s }: { s: Store }) {
 
   const disconnect = async () => {
     if (!confirm('Disconnect Robinhood? Your synced data stays here until you load something else.')) return;
-    try { s.setStatus(await api.logout()); } catch (e) { s.setError((e as Error).message); }
+    try { s.setStatus(await api.disconnect()); } catch (e) { s.setError((e as Error).message); }
+  };
+
+  /** Runs Plaid Link: a new connection, or (with itemId) update mode to repair one whose login expired. */
+  const linkPlaid = async (itemId?: string) => {
+    setLinking(true);
+    s.setError(null);
+    try {
+      const { linkToken } = await api.plaidLinkToken(itemId);
+      const result = await openPlaidLink(linkToken);
+      if (!result) return;
+      s.setStatus(itemId ? await api.plaidRepaired(itemId) : await api.plaidExchange(result.publicToken, result.institution));
+      await s.syncNow();
+    } catch (e) {
+      s.setError((e as Error).message);
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  const unlink = async (itemId: string, name: string) => {
+    if (!confirm(`Unlink ${name}? Plaid's access is revoked right away. Your synced data stays here until you load something else.`)) return;
+    try { s.setStatus(await api.plaidRemove(itemId)); } catch (e) { s.setError((e as Error).message); }
   };
 
   return (
@@ -71,6 +96,9 @@ export function Settings({ s }: { s: Store }) {
         )}
         {mode === 'server' && status && !status.needsToken && (
           <div className="form">
+            {status.provider === 'plaid' ? (
+              <PlaidPanel status={status} busy={s.busy} linking={linking} onLink={linkPlaid} onUnlink={unlink} onSync={s.syncNow} />
+            ) : (
             <div className="conn">
               <span className={`status-dot ${status.connected ? 'on' : ''}`} />
               <div>
@@ -88,7 +116,8 @@ export function Settings({ s }: { s: Store }) {
                 </>
               ) : <button className="btn primary" onClick={() => setConnecting(true)}>Connect Robinhood</button>}
             </div>
-            {status.lastError && <p className="error"><Icon name="alert" size={16} /> Last sync failed: {status.lastError}</p>}
+            )}
+            {status.lastError && <p className="error"><Icon name="alert" size={16} /> {status.lastError}</p>}
             <div className="form">
               <label className="switch-row">
                 <span>Update automatically every day</span>
@@ -103,8 +132,8 @@ export function Settings({ s }: { s: Store }) {
         )}
         {mode === 'local' && (
           <div className="form">
-            <p>Robinhood sync runs through a small server you run yourself, so your login and data never touch anyone else's computer. This page isn't connected to one.</p>
-            <pre className="code">cd dividends{'\n'}npm install && npm run build{'\n'}python3 server/server.py</pre>
+            <p>Robinhood sync runs through a small server you run yourself, which links your account with Plaid. This page isn't connected to one.</p>
+            <pre className="code">cd dividends{'\n'}npm install && npm run build{'\n'}PLAID_CLIENT_ID=… PLAID_SECRET=… python3 server/server.py</pre>
             <p className="muted small">Then open http://127.0.0.1:8787. Until then you can explore with the sample data, import a CSV, or add holdings by hand.</p>
           </div>
         )}
@@ -144,8 +173,8 @@ export function Settings({ s }: { s: Store }) {
       <Card title={<><Icon name="upload" /> Data</>}>
         <div className="form">
           <p className="muted small">
-            Showing <b>{s.portfolio.source === 'demo' ? 'sample data' : fromRobinhood ? 'your Robinhood portfolio' : 'your own data'}</b>.
-            {fromRobinhood ? ' Synced data is read-only here; Robinhood is the source.' : ' Import Robinhood’s account activity report (Account → Reports and statements) for your dividend history, or a CSV with Symbol, Shares, Average Cost and Price columns for holdings.'}
+            Showing <b>{s.portfolio.source === 'demo' ? 'sample data' : fromRobinhood ? 'your synced portfolio' : 'your own data'}</b>.
+            {fromRobinhood ? ' Synced data is read-only here; your brokerage is the source.' : ' Import Robinhood’s account activity report (Account → Reports and statements) for your dividend history, or a CSV with Symbol, Shares, Average Cost and Price columns for holdings.'}
           </p>
           <div className="btn-row">
             {!fromRobinhood && <button className="btn" onClick={() => csvRef.current?.click()}><Icon name="upload" /> Import CSV</button>}
@@ -168,5 +197,57 @@ export function Settings({ s }: { s: Store }) {
 
       {connecting && <Connect onClose={() => setConnecting(false)} onDone={async () => { await s.syncNow(); await s.refresh(); setConnecting(false); }} />}
     </div>
+  );
+}
+
+function PlaidPanel({ status, busy, linking, onLink, onUnlink, onSync }: {
+  status: ServerStatus; busy: boolean; linking: boolean;
+  onLink: (itemId?: string) => void; onUnlink: (itemId: string, name: string) => void; onSync: () => void;
+}) {
+  return (
+    <>
+      <div className="trust">
+        <Icon name="shield" size={22} />
+        <div>
+          <b>Connected securely with Plaid</b>
+          <p className="muted small">
+            You sign in on Plaid's and Robinhood's own screens. This app never sees your password; it gets read-only
+            access to holdings and investment transactions, and can't trade or move money. Unlink here or at my.plaid.com any time.
+          </p>
+        </div>
+      </div>
+      {status.plaidEnv === 'sandbox' && (
+        <p className="note small">Plaid sandbox: pick any bank and sign in with <b>user_good</b> / <b>pass_good</b>. Switch the server to PLAID_ENV=production for real accounts.</p>
+      )}
+      {status.accounts.length > 0 && (
+        <ul className="rows compact">
+          {status.accounts.map((a) => (
+            <li key={a.itemId}>
+              <span className={`status-dot ${a.needsReauth ? 'warn' : 'on'}`} />
+              <div className="row-main">
+                <b>{a.institution}</b>
+                <small>{a.needsReauth ? 'Sign-in expired. Reconnect to keep syncing.' : `Linked ${dateLong(a.linkedAt.slice(0, 10))}`}</small>
+              </div>
+              {a.needsReauth && <button className="btn primary" onClick={() => onLink(a.itemId)} disabled={linking}>Reconnect</button>}
+              <button className="btn danger" onClick={() => onUnlink(a.itemId, a.institution)}>Unlink</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="conn">
+        <div>
+          <b>{status.connected ? `${status.accounts.length} account${status.accounts.length === 1 ? '' : 's'} linked` : 'Not connected'}</b>
+          <small className="muted">
+            Last sync {relativeTime(status.lastSync)}
+            {status.nextSync && <> · next {relativeTime(status.nextSync)}</>}
+          </small>
+        </div>
+        <span className="spacer" />
+        {status.connected && <button className="btn" onClick={onSync} disabled={busy}><Icon name="sync" /> {busy ? 'Syncing…' : 'Sync now'}</button>}
+        <button className={`btn ${status.connected ? '' : 'primary'}`} onClick={() => onLink()} disabled={linking}>
+          <Icon name="link" /> {linking ? 'Opening Plaid…' : status.connected ? 'Link another account' : 'Link Robinhood with Plaid'}
+        </button>
+      </div>
+    </>
   );
 }

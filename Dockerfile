@@ -1,5 +1,7 @@
 # Builds the web app, then runs the sync server on Python's standard library (no pip packages).
-#   docker build -t dividends . && docker run -d -p 8787:8787 -v dividends-data:/app/data -e TZ=America/New_York dividends
+#   docker build -t dividends .
+#   docker run -d -p 8787:8787 -v dividends-data:/app/data -e TZ=America/New_York \
+#     -e PLAID_CLIENT_ID=... -e PLAID_SECRET=... -e PLAID_ENV=production -e APP_TOKEN=... dividends
 FROM node:22-alpine AS web
 WORKDIR /app
 COPY package.json package-lock.json ./

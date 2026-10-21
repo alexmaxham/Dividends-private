@@ -3,14 +3,19 @@ import type { Portfolio } from './types';
 export interface ServerStatus {
   server: true;
   needsToken?: boolean;
+  provider: 'plaid' | 'robinhood';
+  plaidEnv: 'sandbox' | 'production' | null;
   connected: boolean;
   username?: string | null;
+  accounts: LinkedAccount[];
   syncing: boolean;
   lastSync: string | null;
   lastError: string | null;
   nextSync: string | null;
   settings: { syncTime: string; autoSync: boolean };
 }
+
+export interface LinkedAccount { itemId: string; institution: string; linkedAt: string; needsReauth: boolean }
 
 export type LoginResult = { status: 'ok' } | { status: 'mfa_required' } | { status: 'challenge'; type: 'sms' | 'email' | 'prompt'; waiting?: boolean };
 
@@ -51,7 +56,11 @@ export const api = {
   portfolio: () => call<Portfolio | null>('GET', 'portfolio'),
   login: (username: string, password: string, mfaCode?: string) => call<LoginResult>('POST', 'robinhood/login', { username, password, mfaCode }),
   verify: (code?: string) => call<LoginResult>('POST', 'robinhood/verify', { code }),
-  logout: () => call<ServerStatus>('POST', 'robinhood/logout', {}),
+  disconnect: () => call<ServerStatus>('POST', 'disconnect', {}),
+  plaidLinkToken: (itemId?: string) => call<{ linkToken: string }>('POST', 'plaid/link-token', { itemId }),
+  plaidExchange: (publicToken: string, institution: unknown) => call<ServerStatus>('POST', 'plaid/exchange', { publicToken, institution }),
+  plaidRepaired: (itemId: string) => call<ServerStatus>('POST', 'plaid/repaired', { itemId }),
+  plaidRemove: (itemId: string) => call<ServerStatus>('POST', 'plaid/remove', { itemId }),
   sync: () => call<Portfolio>('POST', 'sync', {}, 180000),
   settings: (s: Partial<ServerStatus['settings']>) => call<ServerStatus>('PUT', 'settings', s),
 };

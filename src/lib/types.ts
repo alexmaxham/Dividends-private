@@ -39,7 +39,7 @@ export interface Portfolio {
   dividends: Dividend[];
   history: Snapshot[];
   cash: number;
-  source: 'robinhood' | 'demo' | 'manual';
+  source: 'plaid' | 'robinhood' | 'demo' | 'manual';
   syncedAt: string | null;
 }
 
@@ -85,3 +85,6 @@ export interface Settings {
   apiToken: string;
   taxRate: number;
 }
+
+/** Data that came from a brokerage sync and is read-only in the app. */
+export const isSynced = (p: Pick<Portfolio, 'source'>) => p.source === 'plaid' || p.source === 'robinhood';

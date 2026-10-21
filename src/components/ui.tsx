@@ -102,6 +102,7 @@ const PATHS: Record<string, string> = {
   alert: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
   trash: 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14',
   edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
+  shield: 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM8.5 12l2.5 2.5 4.5-5',
 };
 
 export function Icon({ name, size = 18 }: { name: keyof typeof PATHS | string; size?: number }) {

@@ -79,7 +79,12 @@ export function App() {
           </div>
           {nav('top')}
           <div className="top-actions">
-            {connected ? (
+            {connected && st?.accounts?.some((x) => x.needsReauth) ? (
+              <button className="sync-pill glass-chip" onClick={() => go('settings')}>
+                <span className="status-dot warn" />
+                <span>Reconnect needed</span>
+              </button>
+            ) : connected ? (
               <button className="sync-pill glass-chip" onClick={s.syncNow} disabled={s.busy || st?.syncing} title={st?.nextSync ? `Next automatic sync ${relativeTime(st.nextSync)}` : undefined}>
                 <span className={`status-dot on ${s.busy || st?.syncing ? 'busy' : ''}`} />
                 <span>{s.busy || st?.syncing ? 'Syncing…' : `Synced ${relativeTime(st?.lastSync ?? null)}`}</span>

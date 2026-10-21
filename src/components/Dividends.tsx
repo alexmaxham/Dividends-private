@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { isReceived, monthKey } from '../lib/analytics';
 import { download, toCsv } from '../lib/csv';
 import { dateShort, money, monthLong, shares as fmtShares } from '../lib/format';
-import type { Dividend } from '../lib/types';
+import { isSynced, type Dividend } from '../lib/types';
 import type { Store } from '../useStore';
 import { Card, Empty, Icon, Modal, Money, Segmented, Ticker } from './ui';
 
@@ -17,7 +17,7 @@ export function Dividends({ s, openHolding }: { s: Store; openHolding: (sym: str
   const [state, setState] = useState<StateFilter>('all');
   const [q, setQ] = useState('');
   const [logging, setLogging] = useState(false);
-  const editable = s.portfolio.source !== 'robinhood';
+  const editable = !isSynced(s.portfolio);
 
   const years = useMemo(() => [...new Set(s.portfolio.dividends.map((d) => d.payDate.slice(0, 4)))].sort().reverse(), [s.portfolio.dividends]);
 
