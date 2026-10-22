@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cloudMessage, type LinkedAccount } from '../cloud/firebase';
 import { download, importCsv } from '../lib/csv';
 import { demoPortfolio } from '../lib/demo';
 import { dateLong, relativeTime } from '../lib/format';
 import { openPlaidLink, resumePlaidLink, type LinkResult, type PendingLink } from '../lib/plaidLink';
+import { disablePush, enablePush, isIos, isStandalone, pushActive, pushSupported } from '../lib/push';
+import type { NotifySettings } from '../lib/types';
 import { isSynced, type Portfolio } from '../lib/types';
 import { EMPTY_PORTFOLIO, type Store } from '../useStore';
 import { Card, Icon, Segmented } from './ui';
@@ -98,7 +100,9 @@ export function Settings({ s }: { s: Store }) {
         )}
       </Card>
 
-      <Card title={<><Icon name="target" /> Goals</>}>
+      {mode === 'cloud' && <NotificationsCard s={s} />}
+
+      <Card title={<><Icon name="target" /> Goals and taxes</>}>
         <div className="form-row">
           <label className="field">Monthly income goal
             <span className="input-affix"><i>$</i><input id="goal" type="number" min={0} step={50} value={settings.monthlyGoal} onChange={(e) => updateSettings({ monthlyGoal: Number(e.target.value) })} /></span>
@@ -141,7 +145,7 @@ export function Settings({ s }: { s: Store }) {
           </p>
           <div className="btn-row">
             {canEdit && <button className="btn" onClick={() => csvRef.current?.click()}><Icon name="upload" /> Import CSV</button>}
-            <button className="btn" onClick={() => download(`dividends-backup-${s.today}.json`, JSON.stringify({ portfolio: s.portfolio, settings }, null, 1), 'application/json')}>
+            <button className="btn" onClick={() => download(`dividends-backup-${s.today}.json`, JSON.stringify({ portfolio: s.allPortfolio, settings }, null, 1), 'application/json')}>
               <Icon name="download" /> Back up
             </button>
             {canEdit && <button className="btn" onClick={() => backupRef.current?.click()}>Restore backup</button>}
@@ -273,6 +277,61 @@ function AccountCard({ s }: { s: Store }) {
         {msg && <p className="note">{msg}</p>}
         {err && <p className="error"><Icon name="alert" size={16} /> {err}</p>}
         <p className="muted small"><a href="./privacy.html" className="link-btn">Privacy policy</a></p>
+      </div>
+    </Card>
+  );
+}
+
+const TOPICS: { key: keyof NotifySettings; label: string; note: string }[] = [
+  { key: 'payments', label: 'Payments', note: '"KO paid you $21.20"' },
+  { key: 'raises', label: 'Dividend changes', note: '"PEP raised its dividend 5%", and cuts' },
+  { key: 'reconnect', label: 'Reconnect reminders', note: 'When a brokerage sign-in expires' },
+  { key: 'weekly', label: 'Weekly summary', note: 'Sunday evening: the week and what’s next' },
+];
+
+function NotificationsCard({ s }: { s: Store }) {
+  const n = s.settings.notify;
+  const set = (patch: Partial<NotifySettings>) => s.updateSettings({ notify: { ...n, ...patch } });
+  const [here, setHere] = useState(false); // push is on for this device
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
+  useEffect(() => { void pushActive().then(setHere); }, []);
+
+  const run = async (fn: () => Promise<unknown>, done?: string) => {
+    setWorking(true); setErr(null); setMsg(null);
+    try { await fn(); if (done) setMsg(done); } catch (e) { setErr(cloudMessage(e)); } finally { setWorking(false); }
+  };
+  const togglePush = (on: boolean) => run(async () => {
+    if (on) { await enablePush(s.call); set({ push: true }); setHere(true); }
+    else { await disablePush(s.call); setHere(false); }
+  });
+
+  return (
+    <Card title={<><Icon name="bell" /> Notifications</>}>
+      <div className="form">
+        <label className="switch-row">
+          <span>Email <small className="muted">{s.user?.emailVerified ? s.user.email : 'verify your email address first'}</small></span>
+          <input type="checkbox" className="switch" checked={n.email} onChange={(e) => set({ email: e.target.checked })} />
+        </label>
+        <label className="switch-row">
+          <span>Push on this device <small className="muted">{pushSupported() ? 'alerts on this phone or computer' : isIos() && !isStandalone() ? 'add to your Home Screen first' : 'not supported in this browser'}</small></span>
+          <input type="checkbox" className="switch" checked={here} disabled={working} onChange={(e) => void togglePush(e.target.checked)} />
+        </label>
+        {isIos() && !isStandalone() && (
+          <p className="muted small">On iPhone, notifications work once Dividends is on your Home Screen: tap Share, then Add to Home Screen, and open it from there.</p>
+        )}
+        <div className="topic-list">
+          {TOPICS.map((t) => (
+            <label key={t.key} className="switch-row">
+              <span>{t.label} <small className="muted">{t.note}</small></span>
+              <input type="checkbox" className="switch" checked={n[t.key]} onChange={(e) => set({ [t.key]: e.target.checked })} />
+            </label>
+          ))}
+        </div>
+        <div><button className="btn" disabled={working} onClick={() => void run(() => s.call('testNotification'), 'Sent. It can take a minute to arrive.')}>Send a test</button></div>
+        {msg && <p className="note">{msg}</p>}
+        {err && <p className="error"><Icon name="alert" size={16} /> {err}</p>}
       </div>
     </Card>
   );
