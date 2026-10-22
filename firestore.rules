@@ -30,9 +30,19 @@ service cloud.firestore {
     }
 
     function validSettings(s) {
-      return s is map && s.keys().hasOnly(['monthlyGoal', 'taxRate'])
+      return s is map && s.keys().hasOnly(['monthlyGoal', 'taxRate', 'ordinaryTaxRate', 'watchlist', 'notify'])
         && (!('monthlyGoal' in s) || (s.monthlyGoal is number && s.monthlyGoal >= 0 && s.monthlyGoal < 10000000))
-        && (!('taxRate' in s) || (s.taxRate is number && s.taxRate >= 0 && s.taxRate <= 100));
+        && (!('taxRate' in s) || (s.taxRate is number && s.taxRate >= 0 && s.taxRate <= 100))
+        && (!('ordinaryTaxRate' in s) || (s.ordinaryTaxRate is number && s.ordinaryTaxRate >= 0 && s.ordinaryTaxRate <= 100))
+        && (!('watchlist' in s) || (s.watchlist is list && s.watchlist.size() <= 50))
+        && (!('notify' in s) || validNotify(s.notify));
+    }
+
+    function validNotify(n) {
+      return n is map && n.keys().hasOnly(['email', 'push', 'payments', 'raises', 'reconnect', 'weekly'])
+        && (!('email' in n) || n.email is bool) && (!('push' in n) || n.push is bool)
+        && (!('payments' in n) || n.payments is bool) && (!('raises' in n) || n.raises is bool)
+        && (!('reconnect' in n) || n.reconnect is bool) && (!('weekly' in n) || n.weekly is bool);
     }
 
     function noLinkedAccounts(uid) {

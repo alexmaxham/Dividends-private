@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { addDays, daysBetween, monthlySeries } from '../lib/analytics';
-import { dateShort, pct, signedPct } from '../lib/format';
+import { addDays, daysBetween, monthlySeries, upcomingExDates } from '../lib/analytics';
+import { dateShort, money, pct, signedPct } from '../lib/format';
 import type { Store } from '../useStore';
 import { IncomeBars, Legend, LineChart, Ring } from './Charts';
 import { Card, Empty, Money, Segmented, Stat, Ticker } from './ui';
@@ -27,6 +27,8 @@ export function Overview({ s, openHolding, goTo }: { s: Store; openHolding: (sym
   const goalProgress = settings.monthlyGoal ? totals.monthlyIncome / settings.monthlyGoal : 0;
   const ytdChange = totals.receivedLastYearSamePeriod ? (totals.receivedYtd / totals.receivedLastYearSamePeriod - 1) * 100 : null;
   const top = holdings.filter((h) => h.annualIncome > 0).sort((a, b) => b.annualIncome - a.annualIncome).slice(0, 5);
+  const exDates = useMemo(() => upcomingExDates(holdings, s.market, today, 21), [holdings, s.market, today]);
+  const hasMarket = Object.values(s.market).some((m) => m.dividends?.length);
 
   return (
     <div className="page">
@@ -75,7 +77,8 @@ export function Overview({ s, openHolding, goTo }: { s: Store; openHolding: (sym
                   <Ticker symbol={p.symbol} />
                   <div className="row-main">
                     <b>{p.symbol}</b>
-                    <small>{dateShort(p.date)} · {p.kind === 'confirmed' ? <span className="tag ok">Confirmed</span> : <span className="tag">Estimated</span>}</small>
+                    <small>{dateShort(p.date)} · {p.kind === 'confirmed' ? <span className="tag ok">Confirmed</span> : <span className="tag">Estimated</span>}
+                      {p.exDate && p.exDate >= today && <> · ex {dateShort(p.exDate)}</>}</small>
                   </div>
                   <Money v={p.amount} className="row-amt" />
                 </li>
@@ -115,6 +118,26 @@ export function Overview({ s, openHolding, goTo }: { s: Store; openHolding: (sym
             )}
           </Card>
         </div>
+
+        {hasMarket && (
+          <Card title="Ex-dividend dates" className="span-2" action={<span className="muted small">Next 3 weeks</span>}>
+            {exDates.length ? (
+              <ul className="rows cols">
+                {exDates.map((e) => (
+                  <li key={`${e.symbol}-${e.exDate}`} className="clickable" onClick={() => openHolding(e.symbol)}>
+                    <Ticker symbol={e.symbol} size={30} />
+                    <div className="row-main">
+                      <b>{e.symbol} <span className="muted">ex {dateShort(e.exDate)}</span></b>
+                      <small>{e.exDate === today ? 'Today: shares bought now miss this one' : <>Own it by the close on {dateShort(e.buyBy)} to get {money(e.amount)}/share</>}
+                        {e.payDate && <> · paid {dateShort(e.payDate)}</>}</small>
+                    </div>
+                    <Money v={e.income} className="row-amt" />
+                  </li>
+                ))}
+              </ul>
+            ) : <Empty>No announced ex-dividend dates in the next three weeks.</Empty>}
+          </Card>
+        )}
 
         <Card title="Portfolio value" className="span-2"
           action={<Segmented label="Range" value={range} onChange={setRange} options={(Object.keys(RANGES) as Range[]).map((r) => ({ value: r, label: r }))} />}>

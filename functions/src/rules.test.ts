@@ -54,6 +54,12 @@ describe.runIf(emulator)('firestore.rules', () => {
     await assertSucceeds(updateDoc(doc(as('alice'), 'users/alice'), { settings: { monthlyGoal: 750, taxRate: 15 } }));
     await assertFails(updateDoc(doc(as('alice'), 'users/alice'), { settings: { monthlyGoal: -1 } }));
     await assertFails(updateDoc(doc(as('alice'), 'users/alice'), { settings: { admin: true } }));
+    await assertSucceeds(updateDoc(doc(as('alice'), 'users/alice'), {
+      settings: { monthlyGoal: 750, taxRate: 15, ordinaryTaxRate: 24, watchlist: ['VYM', 'HD'], notify: { email: true, push: false, payments: true, raises: true, reconnect: true, weekly: false } },
+    }));
+    await assertFails(updateDoc(doc(as('alice'), 'users/alice'), { settings: { notify: { email: 'yes' } } }));
+    await assertFails(updateDoc(doc(as('alice'), 'users/alice'), { settings: { notify: { sms: true } } }));
+    await assertFails(updateDoc(doc(as('alice'), 'users/alice'), { settings: { watchlist: Array.from({ length: 51 }, (_, i) => `S${i}`) } }));
     await assertFails(updateDoc(doc(as('alice'), 'users/alice'), { accounts: [] }));
     await assertFails(updateDoc(doc(as('alice'), 'users/alice'), { sync: { lastSync: 'x' } }));
     await assertSucceeds(setDoc(doc(as('carol'), 'users/carol'), { settings: { monthlyGoal: 100 } }));

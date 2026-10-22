@@ -1,13 +1,22 @@
 // Firebase, loaded on demand so the app stays small when it runs without an account.
 import type { CloudConfig } from './config';
-import type { Portfolio } from '../lib/types';
+import type { MarketInfo, NotifySettings, Portfolio } from '../lib/types';
 
 export interface CloudUser { uid: string; email: string | null; emailVerified: boolean }
 
 export interface LinkedAccount { itemId: string; institution: string; linkedAt: string; needsReauth: boolean }
 
+/** Settings that belong to the account (the rest stay on each device). */
+export interface AccountSettings {
+  monthlyGoal: number;
+  taxRate: number;
+  ordinaryTaxRate: number;
+  watchlist: string[];
+  notify: NotifySettings;
+}
+
 export interface Profile {
-  settings?: { monthlyGoal?: number; taxRate?: number };
+  settings?: Partial<AccountSettings>;
   accounts?: LinkedAccount[];
   sync?: { lastSync?: string | null; lastError?: string | null; syncing?: boolean; startedAt?: string };
 }
@@ -73,8 +82,23 @@ export async function loadCloud(cfg: CloudConfig) {
       F.onSnapshot(F.doc(db, 'users', uid), (s) => cb((s.data() as Profile) ?? {}), onError),
     watchPortfolio: (uid: string, cb: (p: Portfolio | null) => void, onError: (e: unknown) => void) =>
       F.onSnapshot(F.doc(db, 'users', uid, 'portfolio', 'current'), (s) => cb((s.data() as Portfolio) ?? null), onError),
-    saveSettings: (uid: string, settings: { monthlyGoal: number; taxRate: number }) =>
+    saveSettings: (uid: string, settings: AccountSettings) =>
       F.setDoc(F.doc(db, 'users', uid), { settings }, { merge: true }),
+    /** Live market data for these symbols (Firestore allows 30 ids per "in" query). */
+    watchMarket: (symbols: string[], cb: (m: Record<string, MarketInfo>) => void, onError: (e: unknown) => void) => {
+      const parts: Record<string, MarketInfo>[] = [];
+      const ids = symbols.map((s) => s.replace(/\//g, '_'));
+      const stops: (() => void)[] = [];
+      for (let i = 0; i < ids.length; i += 30) {
+        const k = i / 30;
+        parts[k] = {};
+        stops.push(F.onSnapshot(F.query(F.collection(db, 'market'), F.where(F.documentId(), 'in', ids.slice(i, i + 30))), (snap) => {
+          parts[k] = Object.fromEntries(snap.docs.map((d) => [(d.data() as MarketInfo).symbol ?? d.id, d.data() as MarketInfo]));
+          cb(Object.assign({}, ...parts));
+        }, onError));
+      }
+      return () => stops.forEach((f) => f());
+    },
     savePortfolio: (uid: string, p: Portfolio) =>
       F.setDoc(F.doc(db, 'users', uid, 'portfolio', 'current'), { ...p, source: 'manual' }),
 

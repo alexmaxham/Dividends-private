@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { isReceived } from '../lib/analytics';
+import { buyBy, isReceived } from '../lib/analytics';
 import { dateLong, dateShort, FREQ_LABEL, money, pct, shares as fmtShares, signedPct } from '../lib/format';
 import type { Store } from '../useStore';
 import { Bars } from './Charts';
@@ -53,7 +53,11 @@ export function HoldingDetail({ s, symbol, onClose }: { s: Store; symbol: string
           <ul className="rows compact">
             {next.map((p) => (
               <li key={p.date}>
-                <div className="row-main"><b>{dateLong(p.date)}</b><small>{p.kind === 'confirmed' ? 'Confirmed' : 'Estimated'} · {money(p.rate)}/share</small></div>
+                <div className="row-main">
+                  <b>{dateLong(p.date)}</b>
+                  <small>{p.kind === 'confirmed' ? 'Confirmed' : 'Estimated'} · {money(p.rate)}/share
+                    {p.exDate && p.exDate >= s.today && <> · ex-dividend {dateShort(p.exDate)}, buy by {dateShort(buyBy(p.exDate))}</>}</small>
+                </div>
                 <Money v={p.amount} className="row-amt" />
               </li>
             ))}
