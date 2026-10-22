@@ -491,3 +491,4 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 .welcome-option span { color: var(--ink-2); font-size: 13.5px; }
 .welcome-option.primary-option { border-color: color-mix(in srgb, var(--series-1) 55%, transparent); background: color-mix(in srgb, var(--series-1) 16%, transparent); }
 @media (max-width: 860px) { .welcome-options { grid-template-columns: 1fr; } }
+.auth-fine a { color: var(--accent); font-weight: 600; }

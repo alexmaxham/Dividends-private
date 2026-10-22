@@ -46,7 +46,9 @@ In the Plaid sandbox, link any institution with `user_good` / `pass_good` to get
 
 1. In the Plaid dashboard, request **Production** access with the **Investments** product. Plaid reviews the app and asks some security questions. Plaid charges for Investments in production; check the dashboard for pricing.
 2. Change `PLAID_ENV=sandbox` to `PLAID_ENV=production` in `functions/.env`, replace the `PLAID_SECRET` repository secret with the production secret, and run **Deploy backend** again. Links made in the sandbox don't carry over, so people link again.
-3. Optional: for OAuth brokerages on phone browsers, register an https redirect URI (a page of this app) in Plaid and set `PLAID_REDIRECT_URI` in `functions/.env`.
+3. **Phone sign-in for OAuth brokerages.** Some brokerages sign people in on their own site or app; on phones, Plaid then sends them back to the app to finish. In the Plaid dashboard under **Developers → API → Allowed redirect URIs**, add `https://alexmaxham.github.io/Dividends-private/`. Then set `PLAID_REDIRECT_URI=https://alexmaxham.github.io/Dividends-private/` in `functions/.env` and deploy. (Set it only after registering it: Plaid rejects links with an unregistered redirect URI.)
+
+The privacy policy Plaid asks for is at https://alexmaxham.github.io/Dividends-private/privacy.html (`public/privacy.html`).
 
 ## Data and privacy
 

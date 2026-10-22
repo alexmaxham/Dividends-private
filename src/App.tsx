@@ -7,7 +7,8 @@ import { Insights } from './components/Insights';
 import { Overview } from './components/Overview';
 import { Planner } from './components/Planner';
 import { AuthScreen } from './components/AuthScreen';
-import { linkWithPlaid, Settings } from './components/Settings';
+import { linkWithPlaid, resumeOAuthLink, Settings } from './components/Settings';
+import { clearOAuthReturn, pendingOAuthReturn } from './lib/plaidLink';
 import { Card, Icon, PrivacyContext } from './components/ui';
 import { relativeTime } from './lib/format';
 import { useStore } from './useStore';
@@ -32,6 +33,14 @@ export function App() {
   const s = useStore();
   const [tab, setTab] = useState<Tab>(tabFromHash);
   const [detail, setDetail] = useState<string | null>(null);
+
+  // Back from a brokerage's own sign-in during Plaid linking: finish once the account is ready.
+  useEffect(() => {
+    if (s.mode === 'loading' || !location.search.includes('oauth_state_id')) return;
+    const pending = pendingOAuthReturn();
+    if (s.mode === 'cloud' && pending) void resumeOAuthLink(s, pending);
+    else clearOAuthReturn();
+  }, [s.mode]);
 
   useEffect(() => {
     const on = () => setTab(tabFromHash());

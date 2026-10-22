@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Privacy Policy · Dividends</title>
+  <meta name="description" content="How the Dividends app collects, uses and protects your information." />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <style>
+    :root {
+      --bg: #070b1a; --ink: #f5f7ff; --ink-2: rgba(234, 238, 255, 0.8); --ink-3: rgba(222, 228, 255, 0.58);
+      --card: rgba(255, 255, 255, 0.06); --edge: rgba(255, 255, 255, 0.13); --accent: #7fb4ff;
+      color-scheme: dark;
+    }
+    @media (prefers-color-scheme: light) {
+      :root { --bg: #e7ecfa; --ink: #0b1020; --ink-2: rgba(15, 22, 45, 0.78); --ink-3: rgba(20, 28, 60, 0.58);
+        --card: rgba(255, 255, 255, 0.55); --edge: rgba(255, 255, 255, 0.8); --accent: #1f5fc0; color-scheme: light; }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: radial-gradient(60vmax 60vmax at 0% 0%, rgba(47, 107, 255, 0.35), transparent 60%),
+        radial-gradient(50vmax 50vmax at 100% 20%, rgba(138, 61, 255, 0.3), transparent 60%), var(--bg);
+      background-attachment: fixed; color: var(--ink);
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, system-ui, sans-serif;
+      padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 48px max(16px, env(safe-area-inset-left));
+    }
+    main {
+      max-width: 760px; margin: 0 auto; padding: 28px clamp(18px, 4vw, 40px) 36px; border-radius: 24px;
+      background: var(--card); border: 1px solid var(--edge);
+      -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+    }
+    h1 { font-size: 30px; letter-spacing: -0.02em; margin: 0 0 4px; }
+    h2 { font-size: 19px; margin: 32px 0 8px; }
+    p, li { color: var(--ink-2); }
+    ul { padding-left: 22px; }
+    li { margin: 4px 0; }
+    a { color: var(--accent); }
+    .meta { color: var(--ink-3); margin: 0 0 20px; font-size: 14px; }
+    .back { display: inline-block; margin-bottom: 18px; font-weight: 600; text-decoration: none; }
+    strong { color: var(--ink); }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="./">← Back to Dividends</a>
+    <h1>Privacy Policy</h1>
+    <p class="meta">Last updated October 22, 2026</p>
+
+    <p>
+      Dividends is a personal dividend portfolio tracker. This policy explains what information the app collects, how
+      it's used, and the choices you have. The short version: your data is used only to show you your own portfolio.
+      It is never sold, shared for advertising, or used to trade or move money.
+    </p>
+
+    <h2>Information we collect</h2>
+    <ul>
+      <li><strong>Account information:</strong> your email address and password. Your password goes directly to Google
+        Firebase Authentication, which stores it only in hashed form; the app itself never stores it.</li>
+      <li><strong>Brokerage data, when you link an account:</strong> through Plaid, the app receives read-only
+        information about your investment accounts: holdings (securities, quantities, cost basis and prices), cash
+        balances, and investment transactions such as dividends, buys and sells, plus the name of your brokerage.</li>
+      <li><strong>Information you enter:</strong> holdings, dividends and CSV files you add by hand, and your settings,
+        such as an income goal and tax rate.</li>
+      <li><strong>Preferences on your device:</strong> theme, glass appearance and privacy mode are saved in your
+        browser's local storage and stay on that device.</li>
+    </ul>
+    <p>The app does not use advertising, analytics or tracking cookies.</p>
+
+    <h2>How we use Plaid</h2>
+    <p>
+      Linking a brokerage uses Plaid Inc. ("Plaid"). You sign in to your brokerage in Plaid's own window, so this app
+      never receives your brokerage username or password. By linking an account, you allow Plaid to collect data from
+      your brokerage and share it with this app, as described in
+      <a href="https://plaid.com/legal/#end-user-privacy-policy" target="_blank" rel="noopener">Plaid's End User Privacy Policy</a>.
+      The access Plaid provides is read-only: the app cannot place trades, transfer funds or change anything in your
+      brokerage account.
+    </p>
+
+    <h2>How we use your information</h2>
+    <ul>
+      <li>To show you your holdings, dividend income, upcoming payouts, insights and projections.</li>
+      <li>To refresh your linked accounts automatically once a day, and when you choose Sync now.</li>
+      <li>To sign you in, keep your account secure, and send account emails such as email verification and password resets.</li>
+    </ul>
+    <p>We do not sell your information, share it with advertisers, or use it for any purpose other than running the app for you.</p>
+
+    <h2>Where your information is stored</h2>
+    <p>
+      Your account and portfolio are stored in Google Firebase (Cloud Firestore) in the United States, and processed
+      by Google Cloud Functions. The credential that lets the app read your linked accounts (a Plaid access token) is
+      stored on the server only and is never sent to your browser. The app's Plaid keys are kept in Google Secret
+      Manager.
+    </p>
+
+    <h2>Who can see your information</h2>
+    <p>
+      Only you. Each account can read only its own data, enforced by the database's security rules. Your information
+      is shared only with the service providers needed to run the app: Google (hosting, sign-in and storage) and Plaid
+      (connecting brokerages). We may disclose information if required by law.
+    </p>
+
+    <h2>Security</h2>
+    <p>
+      Data is encrypted in transit (HTTPS) and at rest. Access to production systems is limited to the app's operator.
+      No system is perfectly secure, but we take reasonable measures to protect your information.
+    </p>
+
+    <h2>Your choices and deleting your data</h2>
+    <ul>
+      <li><strong>Unlink a brokerage</strong> any time in Settings. This revokes the app's access at Plaid immediately.
+        You can also manage connections at <a href="https://my.plaid.com" target="_blank" rel="noopener">my.plaid.com</a>.</li>
+      <li><strong>Delete your account</strong> in Settings → Account. This revokes every linked brokerage at Plaid and
+        permanently deletes your portfolio, history, settings and sign-in.</li>
+      <li><strong>Download a copy</strong> of your data any time with Settings → Data → Back up.</li>
+    </ul>
+
+    <h2>Retention</h2>
+    <p>
+      We keep your information while your account exists. When you unlink a brokerage, previously synced history stays
+      in your account until you delete it or your account. When you delete your account, your data is removed from
+      the database right away.
+    </p>
+
+    <h2>Children</h2>
+    <p>The app is not directed to children under 13, and we do not knowingly collect information from them.</p>
+
+    <h2>Changes</h2>
+    <p>If this policy changes, the updated version will be posted on this page with a new date.</p>
+
+    <h2>Contact</h2>
+    <p>
+      Questions or requests about your data:
+      <a href="https://github.com/alexmaxham/Dividends-private/issues" target="_blank" rel="noopener">open an issue on GitHub</a>.
+    </p>
+  </main>
+</body>
+</html>

@@ -3,7 +3,7 @@ import { cloudMessage, type LinkedAccount } from '../cloud/firebase';
 import { download, importCsv } from '../lib/csv';
 import { demoPortfolio } from '../lib/demo';
 import { dateLong, relativeTime } from '../lib/format';
-import { openPlaidLink } from '../lib/plaidLink';
+import { openPlaidLink, resumePlaidLink, type LinkResult, type PendingLink } from '../lib/plaidLink';
 import { isSynced, type Portfolio } from '../lib/types';
 import { EMPTY_PORTFOLIO, type Store } from '../useStore';
 import { Card, Icon, Segmented } from './ui';
@@ -14,15 +14,31 @@ export async function linkWithPlaid(s: Store, itemId?: string) {
   s.setBusy(true);
   try {
     const { linkToken } = await s.call<{ linkToken: string }>('plaidLinkToken', itemId ? { itemId } : {});
-    const result = await openPlaidLink(linkToken);
-    if (!result) return;
-    if (itemId) await s.call('plaidRepaired', { itemId });
-    else await s.call('plaidExchange', { publicToken: result.publicToken, institution: result.institution });
+    await finishLink(s, await openPlaidLink(linkToken, itemId), itemId);
   } catch (e) {
     s.setError(cloudMessage(e));
   } finally {
     s.setBusy(false);
   }
+}
+
+/** Picks Link back up when a brokerage's own sign-in (OAuth) returns to the app. */
+export async function resumeOAuthLink(s: Store, pending: PendingLink) {
+  s.setError(null);
+  s.setBusy(true);
+  try {
+    await finishLink(s, await resumePlaidLink(pending), pending.itemId);
+  } catch (e) {
+    s.setError(cloudMessage(e));
+  } finally {
+    s.setBusy(false);
+  }
+}
+
+async function finishLink(s: Store, result: LinkResult | null, itemId?: string) {
+  if (!result) return;
+  if (itemId) await s.call('plaidRepaired', { itemId });
+  else await s.call('plaidExchange', { publicToken: result.publicToken, institution: result.institution });
 }
 
 export function Settings({ s }: { s: Store }) {
@@ -253,6 +269,7 @@ function AccountCard({ s }: { s: Store }) {
         )}
         {msg && <p className="note">{msg}</p>}
         {err && <p className="error"><Icon name="alert" size={16} /> {err}</p>}
+        <p className="muted small"><a href="./privacy.html" className="link-btn">Privacy policy</a></p>
       </div>
     </Card>
   );

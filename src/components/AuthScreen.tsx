@@ -75,6 +75,7 @@ export function AuthScreen({ s }: { s: Store }) {
       <button className="link-btn explore" onClick={() => s.setExploring(true)}>Look around with sample data first →</button>
       <p className="muted small auth-fine">
         Your portfolio is private to your account. The app gets read-only access to the brokerages you link and can't trade or move money.
+        {' '}<a href="./privacy.html">Privacy policy</a>
       </p>
     </main>
   );
