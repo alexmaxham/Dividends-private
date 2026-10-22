@@ -388,7 +388,12 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ───────────── Responsive ───────────── */
-@media (max-width: 1360px) {
+@media (max-width: 1400px) {
+  .tabs { gap: 0; }
+  .tabs a { padding: 7px 8px; gap: 5px; font-size: 13px; }
+  .tabs a svg { width: 16px; height: 16px; }
+}
+@media (max-width: 1220px) {
   .tabs a span { display: none; }
   .tabs a { padding: 8px 11px; }
 }
@@ -586,4 +591,31 @@ body.menu-open { overflow: hidden; }
 @media (max-width: 860px) {
   .watch-list li { display: grid; align-items: center; grid-template-columns: auto minmax(0, 1fr) auto auto; }
   .watch-list .watch-cell.wide-only { display: none; }
+}
+
+/* ───────────── Milestones ───────────── */
+.milestone-head { margin: 0 0 12px; }
+.milestones { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.milestones li { position: relative; display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--grid); color: var(--ink-2); }
+.milestones li small { grid-column: 2; }
+.ms-icon { grid-row: span 2; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--fill-chip); }
+.ms-label { font-weight: 600; font-size: 13.5px; }
+.milestones li.done { color: var(--ink-1); border-color: color-mix(in srgb, var(--up) 40%, transparent); }
+.milestones li.done .ms-icon { background: color-mix(in srgb, var(--up) 22%, transparent); color: var(--up); }
+.milestones li.next { color: var(--ink-1); border-color: color-mix(in srgb, var(--series-1) 55%, transparent); }
+.ms-bar { grid-column: 1 / -1; height: 4px; margin-top: 8px; border-radius: 999px; background: var(--track); overflow: hidden; }
+.ms-bar i { display: block; height: 100%; background: var(--series-1); border-radius: 999px; }
+.bench-head { margin: 0 0 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* ───────────── Year in review ───────────── */
+.review { display: grid; gap: 14px; }
+.review > select { justify-self: start; }
+.review-total { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font-size: 40px; font-weight: 700; letter-spacing: -0.02em; color: var(--accent); }
+.review-total small { font-size: 15px; font-weight: 600; }
+.watch-cell b, .watch-cell b .num { font-size: 15px; font-weight: 650; color: var(--ink-1); }
+.whatif-sub { font-size: 13px; color: var(--ink-2); font-weight: 600; margin: 16px 0 4px; }
+@media (max-width: 520px) {
+  .milestones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .milestones li { padding: 8px 10px; column-gap: 8px; }
+  .ms-icon { width: 26px; height: 26px; }
 }

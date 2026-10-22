@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
 import { addDays, daysBetween, monthlySeries, upcomingExDates } from '../lib/analytics';
-import { dateShort, money, pct, signedPct } from '../lib/format';
+import { dateShort, money, money0, pct, signedPct } from '../lib/format';
+import { milestones } from '../lib/milestones';
 import type { Store } from '../useStore';
 import { IncomeBars, Legend, LineChart, Ring } from './Charts';
-import { Card, Empty, Money, Segmented, Stat, Ticker } from './ui';
+import { YearReview } from './YearReview';
+import { Card, Empty, Icon, Money, Segmented, Stat, Ticker } from './ui';
 
 const RANGES = { '1M': 30, '3M': 91, '6M': 182, '1Y': 365, All: 99999 } as const;
 type Range = keyof typeof RANGES;
@@ -11,6 +13,7 @@ type Range = keyof typeof RANGES;
 export function Overview({ s, openHolding, goTo }: { s: Store; openHolding: (sym: string) => void; goTo: (tab: string) => void }) {
   const { totals, payouts, portfolio, today, settings, holdings } = s;
   const [range, setRange] = useState<Range>('6M');
+  const [review, setReview] = useState(false);
   const bars = useMemo(() => monthlySeries(portfolio.dividends, payouts, today, 12, 12), [portfolio.dividends, payouts, today]);
   const history = useMemo(() => {
     const from = addDays(today, -RANGES[range]);
@@ -29,6 +32,8 @@ export function Overview({ s, openHolding, goTo }: { s: Store; openHolding: (sym
   const top = holdings.filter((h) => h.annualIncome > 0).sort((a, b) => b.annualIncome - a.annualIncome).slice(0, 5);
   const exDates = useMemo(() => upcomingExDates(holdings, s.market, today, 21), [holdings, s.market, today]);
   const hasMarket = Object.values(s.market).some((m) => m.dividends?.length);
+  const ms = milestones(totals.monthlyIncome);
+  const lastCovered = ms.list.find((m) => m.covered);
 
   return (
     <div className="page">
@@ -105,7 +110,7 @@ export function Overview({ s, openHolding, goTo }: { s: Store; openHolding: (sym
             </div>
           </div>
         </Card>
-          <Card title={`${year} outlook`}>
+          <Card title={`${year} outlook`} action={<button className="link-btn" onClick={() => setReview(true)}>Year in review</button>}>
             <div className="outlook">
               <div><span>Received</span><b><Money v={totals.receivedYtd} /></b></div>
               <div><span>Still to come</span><b><Money v={restOfYear} /></b></div>
@@ -118,6 +123,26 @@ export function Overview({ s, openHolding, goTo }: { s: Store; openHolding: (sym
             )}
           </Card>
         </div>
+
+        <Card title="Milestones" className="span-2" action={<span className="muted small">What your dividends pay for each month</span>}>
+          <p className="milestone-head">
+            {lastCovered
+              ? <>Your dividends now cover <b>{joinList(ms.list.filter((m) => m.covered).map((m) => m.label))}</b>.</>
+              : <>Next up: <b>{ms.list[0].label}</b>.</>}
+            {ms.next && <span className="muted"> <Money v={ms.next.total - totals.monthlyIncome} />/mo more to cover {ms.next.label} too.</span>}
+          </p>
+          <ol className="milestones">
+            {ms.list.map((m) => (
+              <li key={m.id} className={m.covered ? 'done' : m.id === ms.next?.id ? 'next' : ''}>
+                <span className="ms-icon"><Icon name={m.covered ? 'check' : m.icon} size={16} /></span>
+                <span className="ms-label">{m.label[0].toUpperCase() + m.label.slice(1)}</span>
+                <small className="muted">{s.settings.privacy ? '$•••' : `${money0(m.cost)}/mo`}</small>
+                {m.id === ms.next?.id && <span className="ms-bar" aria-label={`${Math.round(ms.progress * 100)}% of the way`}><i style={{ width: `${Math.min(100, ms.progress * 100)}%` }} /></span>}
+              </li>
+            ))}
+          </ol>
+          <p className="footnote">Typical US monthly costs, stacked from the smallest: each one is covered once your income pays for it and everything before it.</p>
+        </Card>
 
         {hasMarket && (
           <Card title="Ex-dividend dates" className="span-2" action={<span className="muted small">Next 3 weeks</span>}>
@@ -164,6 +189,12 @@ export function Overview({ s, openHolding, goTo }: { s: Store; openHolding: (sym
           </ul>
         </Card>
       </div>
+      {review && <YearReview s={s} onClose={() => setReview(false)} />}
     </div>
   );
+}
+
+/** "a, b and c" */
+function joinList(items: string[]): string {
+  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }

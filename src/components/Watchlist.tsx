@@ -3,7 +3,7 @@ import { cloudMessage } from '../cloud/firebase';
 import { symbolSummary, whatIf } from '../lib/explore';
 import { dateShort, FREQ_LABEL, money, pct, shares as fmtShares, signedPct } from '../lib/format';
 import type { Store } from '../useStore';
-import { IncomeBars, Legend } from './Charts';
+import { IncomeBars } from './Charts';
 import { Card, Empty, Icon, Money, Stat, Ticker } from './ui';
 
 const TICKER = /^[A-Z][A-Z0-9.\-]{0,9}$/;
@@ -114,9 +114,9 @@ function WhatIfCard({ s, choices }: { s: Store; choices: string[] }) {
           </div>
           {added > 0 ? (
             <>
-              <IncomeBars data={r.months.map((m) => ({ month: m.month, received: m.before, projected: m.added }))} height={200}
-                labels={{ solid: 'Already expected', hatched: `From ${sym}` }} label={`Expected monthly income with ${money(amount)} more in ${sym}`} />
-              <Legend items={[{ label: 'Already expected', color: 'var(--series-1)' }, { label: `Added by ${sym}`, hatch: true }]} />
+              <h3 className="whatif-sub">When the extra income arrives</h3>
+              <IncomeBars data={r.months.map((m) => ({ month: m.month, received: m.added, projected: 0 }))} height={180}
+                labels={{ solid: `From ${sym}`, hatched: '' }} label={`Extra monthly income from ${money(amount)} more in ${sym}`} />
             </>
           ) : <p className="muted">{sym} doesn't pay a dividend, so this wouldn't add income.</p>}
           <p className="footnote">At today's price and current dividend rate. A payment only counts if you buy before its ex-dividend date.</p>

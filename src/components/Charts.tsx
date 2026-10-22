@@ -160,8 +160,8 @@ export interface Series {
   area?: boolean;
 }
 
-export function LineChart({ series, xLabels, height = 220, format = money0, xFormat = dateLong, label }: {
-  series: Series[]; xLabels: string[]; height?: number; format?: (n: number) => string; xFormat?: (s: string) => string; label: string;
+export function LineChart({ series, xLabels, height = 220, format = money0, axisFormat = moneyCompact, xFormat = dateLong, label }: {
+  series: Series[]; xLabels: string[]; height?: number; format?: (n: number) => string; axisFormat?: (n: number) => string; xFormat?: (s: string) => string; label: string;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const hidden = useContext(PrivacyContext);
@@ -202,7 +202,7 @@ export function LineChart({ series, xLabels, height = 220, format = money0, xFor
         {grid.map((g, i) => (
           <g key={i}>
             <line x1={pad.l} x2={width - pad.r} y1={y(g)} y2={y(g)} className="grid" />
-            {!hidden && <text x={pad.l - 8} y={y(g) + 4} textAnchor="end" className="axis">{moneyCompact(g)}</text>}
+            {!hidden && <text x={pad.l - 8} y={y(g) + 4} textAnchor="end" className="axis">{axisFormat(g)}</text>}
           </g>
         ))}
         {series.map((s) => {
