@@ -33,6 +33,7 @@ export function App() {
   const s = useStore();
   const [tab, setTab] = useState<Tab>(tabFromHash);
   const [detail, setDetail] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Back from a brokerage's own sign-in during Plaid linking: finish once the account is ready.
   useEffect(() => {
@@ -43,7 +44,7 @@ export function App() {
   }, [s.mode]);
 
   useEffect(() => {
-    const on = () => setTab(tabFromHash());
+    const on = () => { setTab(tabFromHash()); setMenuOpen(false); };
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
   }, []);
@@ -62,17 +63,14 @@ export function App() {
     return () => mq.removeEventListener('change', apply);
   }, [s.settings.theme, s.settings.glass]);
 
-  // Rendered twice: in the top bar on wide screens, as a floating bottom bar on phones. (A fixed bar can't live
-  // inside the top bar: its backdrop-filter would make it the bar's containing block.)
-  const nav = (where: 'top' | 'bottom') => (
-    <nav className={`tabs ${where}`} aria-label="Sections">
-            {TABS.map((t) => (
-              <a key={t.id} href={`#${t.id}`} className={tab === t.id ? 'on' : ''} aria-current={tab === t.id ? 'page' : undefined}>
-                <Icon name={t.icon} /> <span>{t.label}</span>
-              </a>
-            ))}
-          </nav>
-  );
+  // The phone menu: close with Escape, and keep the page behind it from scrolling while it's open.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false);
+    window.addEventListener('keydown', onKey);
+    document.body.classList.add('menu-open');
+    return () => { window.removeEventListener('keydown', onKey); document.body.classList.remove('menu-open'); };
+  }, [menuOpen]);
   const go = (t: string) => { location.hash = t; window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const open = (sym: string) => setDetail(sym);
   const sync = s.profile.sync ?? {};
@@ -99,7 +97,13 @@ export function App() {
             <span className="brand-mark" aria-hidden="true">$</span>
             <span>Dividends</span>
           </div>
-          {nav('top')}
+          <nav className="tabs" aria-label="Sections">
+            {TABS.map((t) => (
+              <a key={t.id} href={`#${t.id}`} className={tab === t.id ? 'on' : ''} aria-current={tab === t.id ? 'page' : undefined}>
+                <Icon name={t.icon} /> <span>{t.label}</span>
+              </a>
+            ))}
+          </nav>
           <div className="top-actions">
             {s.mode === 'cloud' && s.linked && needsReauth ? (
               <button className="sync-pill glass-chip" onClick={() => go('settings')}>
@@ -127,6 +131,10 @@ export function App() {
             )}
             <button className="icon-btn glass-chip" onClick={() => s.updateSettings({ privacy: !s.settings.privacy })} aria-label={s.settings.privacy ? 'Show amounts' : 'Hide amounts'} aria-pressed={s.settings.privacy}>
               <Icon name={s.settings.privacy ? 'eyeOff' : 'eye'} />
+            </button>
+            <button className={`icon-btn glass-chip menu-btn ${menuOpen ? 'open' : ''}`} onClick={() => setMenuOpen((o) => !o)}
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-expanded={menuOpen} aria-controls="menu-sheet">
+              <span className="burger" aria-hidden="true"><i /><i /><i /></span>
             </button>
           </div>
         </header>
@@ -157,7 +165,31 @@ export function App() {
           {tab === 'settings' && <Settings s={s} />}
         </main>
       </div>
-      {nav('bottom')}
+      {/* Phone menu. Outside the top bar: the bar's backdrop-filter would otherwise become its containing block. */}
+      <div className={`menu-scrim ${menuOpen ? 'open' : ''}`} onClick={() => setMenuOpen(false)} aria-hidden="true" />
+      <nav id="menu-sheet" className={`menu-sheet glass ${menuOpen ? 'open' : ''}`} aria-label="Menu" aria-hidden={!menuOpen} inert={!menuOpen}>
+        <ul className="menu-list">
+          {TABS.map((t) => (
+            <li key={t.id}>
+              <a href={`#${t.id}`} className={tab === t.id ? 'on' : ''} aria-current={tab === t.id ? 'page' : undefined}
+                onClick={() => { setMenuOpen(false); window.scrollTo({ top: 0 }); }}>
+                <Icon name={t.icon} size={20} />
+                <span>{t.label}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+        <div className="menu-foot">
+          {s.mode === 'cloud' ? (
+            <>
+              <span className="menu-account"><Icon name="user" size={16} /> {s.user?.email}</span>
+              <button className="btn" onClick={() => { setMenuOpen(false); void s.cloud?.signOut(); }}>Sign out</button>
+            </>
+          ) : signedOut ? (
+            <button className="btn primary" onClick={() => { setMenuOpen(false); s.setExploring(false); }}>Sign in or create an account</button>
+          ) : null}
+        </div>
+      </nav>
       {detail && <HoldingDetail s={s} symbol={detail} onClose={() => setDetail(null)} />}
     </PrivacyContext.Provider>
   );
