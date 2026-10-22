@@ -1,6 +1,7 @@
 // Per-user sync: pull every linked login from Plaid, merge, and write the user's portfolio document.
 
 import type { Firestore } from 'firebase-admin/firestore';
+import { docId, reconcileDividends, type MarketDoc } from './market.js';
 import { mergePortfolios, Plaid, PlaidError, type ItemData } from './plaid.js';
 
 export const REAUTH_CODES = new Set(['ITEM_LOGIN_REQUIRED', 'PENDING_EXPIRATION', 'PENDING_DISCONNECT']);
@@ -63,7 +64,7 @@ export async function syncUser(db: Firestore, plaid: Plaid, uid: string, opts: {
     for (const doc of items.docs) {
       const it = doc.data() as PlaidItemDoc;
       try {
-        const part = await plaid.fetchItem(it.accessToken, today);
+        const part = await plaid.fetchItem(it.accessToken, today, it.institution);
         parts.push(part);
         loading ||= !part.historyReady;
         if (it.needsReauth) await doc.ref.update({ needsReauth: false });
@@ -84,13 +85,23 @@ export async function syncUser(db: Firestore, plaid: Plaid, uid: string, opts: {
     if (!parts.length) throw new SyncError(problems.join(' ') || 'No linked accounts returned data.');
     if (loading) problems.push("Plaid is still gathering your dividend history; it'll appear in a few minutes.");
 
+    // Correct rebuilt per-share rates with announced amounts and splits, where market data has them.
+    const symbols = [...new Set(parts.flatMap((p) => p.dividends.map((d) => d.symbol)))];
+    if (symbols.length) {
+      const snaps = await db.getAll(...symbols.map((sym) => db.doc(`market/${docId(sym)}`)));
+      const market = new Map(snaps.filter((x) => x.exists).map((x) => [x.get('symbol') as string, x.data() as MarketDoc]));
+      if (market.size) {
+        for (const p of parts) p.dividends = reconcileDividends(p.dividends, market, new Set(p.splitSymbols));
+      }
+    }
+
     const portfolioRef = db.doc(`users/${uid}/portfolio/current`);
     const previous = (await portfolioRef.get()).data();
     const merged = mergePortfolios(parts, previous, today);
     const value = merged.holdings.reduce((s, h) => s + h.shares * h.price, 0);
     const cost = merged.holdings.reduce((s, h) => s + h.shares * h.avgCost, 0);
     const history = ((previous?.history ?? []) as { date: string }[]).filter((s) => s.date !== today);
-    history.push({ date: today, value: round2(value), cost: round2(cost) } as { date: string });
+    history.push({ date: today, value: round2(value), cost: round2(cost), byAccount: accountTotals(merged.holdings) } as { date: string });
     const portfolio = { ...merged, history: history.slice(-HISTORY_SNAPSHOTS), source: 'plaid', syncedAt: now.toISOString() };
     await portfolioRef.set(portfolio);
     await finish({
@@ -103,6 +114,20 @@ export async function syncUser(db: Firestore, plaid: Plaid, uid: string, opts: {
     await finish({ lastError: (e as Error).message, retryAt: null });
     throw e;
   }
+}
+
+/** Value and cost per brokerage account, so the account filter can show each one's history. */
+export function accountTotals(holdings: { price: number; lots?: { account: string; shares: number; cost: number }[] }[]) {
+  const out: Record<string, { value: number; cost: number }> = {};
+  for (const h of holdings) {
+    for (const l of h.lots ?? []) {
+      const t = (out[l.account] ??= { value: 0, cost: 0 });
+      t.value += l.shares * h.price;
+      t.cost += l.cost;
+    }
+  }
+  for (const t of Object.values(out)) { t.value = round2(t.value); t.cost = round2(t.cost); }
+  return out;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;

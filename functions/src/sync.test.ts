@@ -47,7 +47,8 @@ describe.runIf(emulator)('syncUser', () => {
     expect(p.source).toBe('plaid');
     expect(p.holdings[0]).toMatchObject({ symbol: 'KO', shares: 10, avgCost: 50 });
     expect(p.dividends[0]).toMatchObject({ amount: 5.1, rate: 0.51 });
-    expect(p.history).toEqual([{ date: '2026-10-21', value: 700, cost: 500 }]);
+    expect(p.history).toEqual([{ date: '2026-10-21', value: 700, cost: 500, byAccount: { a1: { value: 700, cost: 500 } } }]);
+    expect(p.accounts).toEqual([{ id: 'a1', name: 'Investment account', mask: null, subtype: 'brokerage', institution: 'Robinhood' }]);
     const user = (await db.doc('users/u1').get()).data()!;
     expect(user.accounts).toEqual([{ itemId: 'i1', institution: 'Robinhood', linkedAt: '2026-10-01T00:00:00Z', needsReauth: false }]);
     expect(user.accounts[0].accessToken).toBeUndefined();
@@ -77,6 +78,14 @@ describe.runIf(emulator)('syncUser', () => {
     await expect(syncUser(db, fakePlaid(), 'u1', { manual: true, now: new Date(now.getTime() + 20_000) })).rejects.toThrow(/less than a minute/);
     await db.doc('users/u1').set({ sync: { syncing: true, startedAt: now.toISOString() } }, { merge: true });
     await expect(syncUser(db, fakePlaid(), 'u1', { now: new Date(now.getTime() + 60_000) })).rejects.toThrow(/already running/);
+  });
+
+  it('corrects per-share rates from market data', async () => {
+    await db.doc('market/KO').set({ symbol: 'KO', dividends: [{ exDate: '2026-09-12', payDate: '2026-10-01', amount: 0.255 }], splits: [] });
+    await syncUser(db, fakePlaid(), 'u1', { now: new Date('2026-10-21T15:00:00Z') });
+    const p = (await db.doc('users/u1/portfolio/current').get()).data()!;
+    expect(p.dividends[0]).toMatchObject({ amount: 5.1, rate: 0.255, shares: 20 });
+    await db.doc('market/KO').delete();
   });
 
   it("only reads the caller's own linked logins", async () => {

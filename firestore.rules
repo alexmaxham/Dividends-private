@@ -24,6 +24,11 @@ service cloud.firestore {
       }
     }
 
+    // Public market data (announced dividends, prices), shared by everyone. Only Cloud Functions write it.
+    match /market/{symbol} {
+      allow read: if request.auth != null;
+    }
+
     function validSettings(s) {
       return s is map && s.keys().hasOnly(['monthlyGoal', 'taxRate'])
         && (!('monthlyGoal' in s) || (s.monthlyGoal is number && s.monthlyGoal >= 0 && s.monthlyGoal < 10000000))

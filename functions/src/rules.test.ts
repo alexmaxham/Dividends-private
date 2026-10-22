@@ -25,6 +25,7 @@ describe.runIf(emulator)('firestore.rules', () => {
       await setDoc(doc(db, 'users/linked'), { settings: {}, accounts: [{ itemId: 'i1', institution: 'Robinhood' }] });
       await setDoc(doc(db, 'users/linked/portfolio/current'), { source: 'plaid', holdings: [] });
       await setDoc(doc(db, 'plaidItems/i1'), { uid: 'linked', accessToken: 'access-secret' });
+      await setDoc(doc(db, 'market/KO'), { symbol: 'KO', dividends: [] });
     });
   });
 
@@ -36,6 +37,12 @@ describe.runIf(emulator)('firestore.rules', () => {
     await assertFails(getDoc(doc(as('bob'), 'users/alice')));
     await assertFails(getDoc(doc(as('bob'), 'users/alice/portfolio/current')));
     await assertFails(getDoc(doc(as(null), 'users/alice')));
+  });
+
+  it('shares market data with signed-in people, read-only', async () => {
+    await assertSucceeds(getDoc(doc(as('alice'), 'market/KO')));
+    await assertFails(getDoc(doc(as(null), 'market/KO')));
+    await assertFails(setDoc(doc(as('alice'), 'market/KO'), { symbol: 'KO', dividends: [{ amount: 99 }] }));
   });
 
   it('never exposes Plaid access tokens', async () => {

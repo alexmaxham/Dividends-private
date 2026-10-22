@@ -9,7 +9,7 @@ const SECURITIES = [
   { security_id: 's-cash', ticker_symbol: 'CUR:USD', name: 'U S Dollar', type: 'cash', is_cash_equivalent: true },
 ];
 const HOLDINGS = {
-  accounts: [{ account_id: 'a1', type: 'investment' }, { account_id: 'chk', type: 'depository' }],
+  accounts: [{ account_id: 'a1', type: 'investment', subtype: 'brokerage', name: 'Individual', mask: '1234' }, { account_id: 'chk', type: 'depository' }],
   securities: SECURITIES,
   holdings: [
     { account_id: 'a1', security_id: 's-ko', quantity: 12, institution_price: 71.0, cost_basis: 660.0 },
@@ -24,6 +24,7 @@ const TRANSACTIONS = [
   { investment_transaction_id: 't3', account_id: 'a1', security_id: 's-ko', date: '2026-10-01', type: 'cash', subtype: 'qualified dividend', amount: -6.12, quantity: 0 },
   { investment_transaction_id: 't4', account_id: 'a1', security_id: 's-ko', date: '2026-10-01', type: 'buy', subtype: 'dividend reinvestment', amount: 6.12, quantity: 0 },
   { investment_transaction_id: 't5', account_id: 'a1', security_id: 's-schd', date: '2026-09-25', type: 'cash', subtype: 'dividend', amount: -26.0, quantity: 0 },
+  { investment_transaction_id: 't6', account_id: 'a1', security_id: 's-schd', date: '2026-09-26', type: 'fee', subtype: 'non-resident tax', amount: 1.5, quantity: 0 },
 ];
 
 function fakePlaid(opts: { pages?: object[][]; errors?: Record<string, string> } = {}) {
@@ -79,6 +80,27 @@ describe('Plaid', () => {
     expect(out.historyReady).toBe(true);
   });
 
+  it('keeps accounts apart, with qualified flags and tax withheld', async () => {
+    const out = await fakePlaid().plaid.fetchItem('access', TODAY, 'Robinhood');
+    expect(out.accounts).toEqual([{ id: 'a1', name: 'Individual', mask: '1234', subtype: 'brokerage', institution: 'Robinhood' }]);
+    const ko = out.holdings.find((h) => h.symbol === 'KO')!;
+    expect(ko.lots).toEqual([{ account: 'a1', shares: 12, cost: 660 }]);
+    const byId = Object.fromEntries(out.dividends.map((d) => [d.id, d]));
+    expect(byId['plaid-t1'].qualified).toBeUndefined(); // plain "dividend": the brokerage didn't say
+    expect(byId['plaid-t3']).toMatchObject({ qualified: true, account: 'a1' });
+    expect(byId['plaid-t5'].withholding).toBe(1.5);
+  });
+
+  it('counts a split as shares added, so earlier per-share rates stay right', async () => {
+    const split = { investment_transaction_id: 's1', account_id: 'a1', security_id: 's-ko', date: '2026-09-01', type: 'transfer', subtype: 'split', amount: 0, quantity: 6 };
+    const { plaid } = fakePlaid({ pages: [[...TRANSACTIONS, split]] });
+    const out = await plaid.fetchItem('a', TODAY);
+    const july = out.dividends.find((d) => d.id === 'plaid-t1')!;
+    // 12 today − 6 from the split − 2 bought in August = 4 shares in July.
+    expect([july.shares, july.rate]).toEqual([4, 1.275]);
+    expect(out.splitSymbols).toEqual(['KO']);
+  });
+
   it('pages through transactions', async () => {
     const { plaid, calls } = fakePlaid({ pages: [TRANSACTIONS.slice(0, 2), TRANSACTIONS.slice(2)] });
     expect((await plaid.fetchItem('a', TODAY)).dividends).toHaveLength(3);
@@ -113,11 +135,14 @@ describe('mergePortfolios', () => {
   });
 
   it('combines several logins', () => {
-    const h = (avgCost: number) => ({ symbol: 'KO', name: 'KO', shares: 10, avgCost, price: 70, prevClose: 70, dividendYield: 0, sector: 'x', industry: '' });
+    const h = (avgCost: number, account: string) => ({ symbol: 'KO', name: 'KO', shares: 10, avgCost, price: 70, prevClose: 70, dividendYield: 0, sector: 'x', industry: '', lots: [{ account, shares: 10, cost: avgCost * 10 }] });
+    const acct = (id: string, subtype: string) => ({ id, name: id, mask: null, subtype, institution: 'Robinhood' });
     const m = mergePortfolios([
-      { holdings: [h(50)], dividends: [], cash: 1, historyReady: true },
-      { holdings: [h(60)], dividends: [], cash: 2, historyReady: true },
+      { holdings: [h(50, 'ind')], dividends: [], accounts: [acct('ind', 'brokerage')], cash: 1, historyReady: true, splitSymbols: [] },
+      { holdings: [h(60, 'roth')], dividends: [], accounts: [acct('roth', 'roth')], cash: 2, historyReady: true, splitSymbols: [] },
     ], null, TODAY);
     expect([m.holdings[0].shares, m.holdings[0].avgCost, m.cash]).toEqual([20, 55, 3]);
+    expect(m.holdings[0].lots.map((l) => l.account)).toEqual(['ind', 'roth']);
+    expect(m.accounts.map((a) => a.subtype)).toEqual(['brokerage', 'roth']);
   });
 });

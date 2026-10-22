@@ -1,16 +1,20 @@
-// Cloud Functions for Dividends: Plaid Link, manual sync, account deletion, and the scheduled daily sync.
+// Cloud Functions for Dividends: Plaid Link, manual sync, account deletion, the scheduled daily sync, and market data.
 //
-// Secrets (set once with `firebase functions:secrets:set NAME`): PLAID_CLIENT_ID, PLAID_SECRET.
-// Parameters (asked on first deploy, or in functions/.env): PLAID_ENV = sandbox | production.
+// Secrets (set once with `firebase functions:secrets:set NAME`): PLAID_CLIENT_ID, PLAID_SECRET, and the optional
+// MARKET_API_KEY (Massive / Polygon.io) and FINNHUB_API_KEY. An optional secret set to "none" leaves that feature off.
+// Parameters (asked on first deploy, or in functions/.env): PLAID_ENV = sandbox | production, MARKET_API_BASE,
+// MARKET_CALLS_PER_MINUTE.
 
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { defineSecret, defineString } from 'firebase-functions/params';
+import { defineInt, defineSecret, defineString } from 'firebase-functions/params';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { Plaid, PlaidError, type PlaidEnv } from './plaid.js';
+import { Finnhub, Massive, MarketError, validSymbol } from './market.js';
+import { lookupSymbol as lookup, refreshMarket, refreshQuotes } from './marketSync.js';
 import { refreshAccounts, SyncError, syncUser, type PlaidItemDoc } from './sync.js';
 
 initializeApp();
@@ -21,11 +25,23 @@ const PLAID_SECRET = defineSecret('PLAID_SECRET');
 const PLAID_ENV = defineString('PLAID_ENV', { default: 'sandbox', description: 'Plaid environment: sandbox or production' });
 const PLAID_REDIRECT_URI = defineString('PLAID_REDIRECT_URI', { default: '', description: 'Optional OAuth redirect URI registered with Plaid' });
 
+const MARKET_API_KEY = defineSecret('MARKET_API_KEY');
+const FINNHUB_API_KEY = defineSecret('FINNHUB_API_KEY');
+const MARKET_API_BASE = defineString('MARKET_API_BASE', { default: 'https://api.massive.com', description: 'Massive / Polygon.io API host' });
+const MARKET_CALLS_PER_MINUTE = defineInt('MARKET_CALLS_PER_MINUTE', { default: 5, description: 'Market data calls allowed per minute (5 on the free plan)' });
+
 const secrets = [PLAID_CLIENT_ID, PLAID_SECRET];
+/** An optional secret's value, or '' when it was left as the "none" placeholder. */
+const optional = (v: string) => (v && v.trim() !== 'none' ? v.trim() : '');
 const opts = { secrets, region: 'us-central1', enforceAppCheck: false };
 
 function plaid(): Plaid {
   return new Plaid(PLAID_CLIENT_ID.value(), PLAID_SECRET.value(), PLAID_ENV.value() as PlaidEnv, fetch, PLAID_REDIRECT_URI.value() || undefined);
+}
+
+function massive(): Massive | null {
+  const key = optional(MARKET_API_KEY.value());
+  return key ? new Massive(key, { base: MARKET_API_BASE.value(), callsPerMinute: MARKET_CALLS_PER_MINUTE.value() }) : null;
 }
 
 function requireUser(req: CallableRequest): string {
@@ -37,6 +53,10 @@ function requireUser(req: CallableRequest): string {
 function toHttps(e: unknown): HttpsError {
   if (e instanceof HttpsError) return e;
   if (e instanceof SyncError) return new HttpsError('failed-precondition', e.message);
+  if (e instanceof MarketError) {
+    logger.warn('Market data error', { status: e.status, message: e.message });
+    return new HttpsError(e.status === 404 ? 'not-found' : e.status === 429 ? 'resource-exhausted' : 'unavailable', e.message);
+  }
   if (e instanceof PlaidError) {
     logger.warn('Plaid error', { code: e.code, status: e.status, message: e.message });
     return new HttpsError('failed-precondition', e.message, { code: e.code });
@@ -167,3 +187,45 @@ export const retrySync = onSchedule(
     await Promise.allSettled(due.docs.map((d) => syncUser(db, p, d.id)));
   },
 );
+
+// ───────────── Market data ─────────────
+
+/** Announced dividends, ex-dividend dates, splits and closing prices. Before the 6:30 sync, then every 2 hours to catch up. */
+export const marketRefresh = onSchedule(
+  { schedule: '5 */2 * * *', timeZone: 'America/New_York', secrets: [MARKET_API_KEY], timeoutSeconds: 540, region: 'us-central1' },
+  async () => {
+    const api = massive();
+    if (!api) return;
+    // Leave a minute of the 9-minute limit spare.
+    const result = await refreshMarket(db, api, { maxCalls: Math.max(1, MARKET_CALLS_PER_MINUTE.value() * 8) });
+    logger.info('Market refresh', result);
+  },
+);
+
+/** One symbol's dividends and price, for the watchlist and what-if. */
+export const lookupSymbol = onCall({ secrets: [MARKET_API_KEY], region: 'us-central1', timeoutSeconds: 120 }, async (req) => {
+  requireUser(req);
+  const symbol = (req.data as { symbol?: unknown })?.symbol;
+  if (!validSymbol(symbol)) throw new HttpsError('invalid-argument', 'Enter a ticker symbol, like SCHD.');
+  const api = massive();
+  if (!api) throw new HttpsError('failed-precondition', "Market data isn't set up yet.");
+  try {
+    return await lookup(db, api, symbol);
+  } catch (e) {
+    throw toHttps(e);
+  }
+});
+
+/** Prices during the day for the caller's symbols (cached for a minute across everyone). */
+export const quotes = onCall({ secrets: [FINNHUB_API_KEY], region: 'us-central1' }, async (req) => {
+  requireUser(req);
+  const token = optional(FINNHUB_API_KEY.value());
+  if (!token) return { quotes: {}, enabled: false };
+  const raw = (req.data as { symbols?: unknown })?.symbols;
+  const symbols = [...new Set((Array.isArray(raw) ? raw : []).filter(validSymbol).map((s) => s.toUpperCase()))].slice(0, 60);
+  try {
+    return { quotes: await refreshQuotes(db, new Finnhub(token), symbols), enabled: true };
+  } catch (e) {
+    throw toHttps(e);
+  }
+});
