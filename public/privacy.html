@@ -54,13 +54,18 @@
 
     <h2>Information we collect</h2>
     <ul>
-      <li><strong>Account information:</strong> your email address and password. Your password goes directly to Google
-        Firebase Authentication, which stores it only in hashed form; the app itself never stores it.</li>
+      <li><strong>Account information:</strong> your email address and password, or your Google account's name and
+        email if you sign in with Google. Your password goes directly to Google Firebase Authentication, which stores it
+        only in hashed form; the app itself never stores it. If you turn on two-step verification, Firebase keeps the
+        secret your authenticator app uses to make codes.</li>
       <li><strong>Brokerage data, when you link an account:</strong> through Plaid, the app receives read-only
         information about your investment accounts: holdings (securities, quantities, cost basis and prices), cash
-        balances, and investment transactions such as dividends, buys and sells, plus the name of your brokerage.</li>
+        balances, and investment transactions such as dividends, buys and sells, plus the name of your brokerage and
+        each account's name, type (for example individual or Roth IRA) and last four digits.</li>
       <li><strong>Information you enter:</strong> holdings, dividends and CSV files you add by hand, and your settings,
-        such as an income goal and tax rate.</li>
+        such as an income goal, tax rates, watchlist and notification choices.</li>
+      <li><strong>Notifications, if you turn them on:</strong> for push notifications, the address your browser gives
+        for delivering them to that device.</li>
       <li><strong>Preferences on your device:</strong> theme, glass appearance and privacy mode are saved in your
         browser's local storage and stay on that device.</li>
     </ul>
@@ -81,6 +86,8 @@
       <li>To show you your holdings, dividend income, upcoming payouts, insights and projections.</li>
       <li>To refresh your linked accounts automatically once a day, and when you choose Sync now.</li>
       <li>To sign you in, keep your account secure, and send account emails such as email verification and password resets.</li>
+      <li>To send the notifications you choose (payments, dividend changes, reconnect reminders and a weekly summary),
+        by email or push. Turn any of them off in Settings → Notifications.</li>
     </ul>
     <p>We do not sell your information, share it with advertisers, or use it for any purpose other than running the app for you.</p>
 
@@ -95,8 +102,11 @@
     <h2>Who can see your information</h2>
     <p>
       Only you. Each account can read only its own data, enforced by the database's security rules. Your information
-      is shared only with the service providers needed to run the app: Google (hosting, sign-in and storage) and Plaid
-      (connecting brokerages). We may disclose information if required by law.
+      is shared only with the service providers needed to run the app: Google (hosting, sign-in and storage), Plaid
+      (connecting brokerages), Resend (sending notification emails: your email address and the message) and your
+      browser's push service (delivering push notifications). Market data (dividend announcements and prices) comes
+      from Massive and Finnhub; the app asks them about ticker symbols only, never about you or your holdings'
+      amounts. We may disclose information if required by law.
     </p>
 
     <h2>Security</h2>

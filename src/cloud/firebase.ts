@@ -108,9 +108,8 @@ export async function loadCloud(cfg: CloudConfig) {
     /** Resolves null when signed in, or a SecondStep when the account has two-step verification. */
     signIn: (email: string, password: string) => signedIn(A.signInWithEmailAndPassword(auth, email.trim(), password)),
     signInWithGoogle: async (): Promise<SecondStep | null> => {
-      // Installed home-screen apps can't open pop-ups reliably; go by redirect there.
-      const installed = matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true;
-      if (installed) { await A.signInWithRedirect(auth, google()); return null; }
+      // A pop-up first: a redirect needs the app and the sign-in pages on one domain in browsers that block
+      // third-party storage (Safari, and Chrome increasingly). Redirect only when the pop-up is blocked.
       try {
         await A.signInWithPopup(auth, google());
         return null;
