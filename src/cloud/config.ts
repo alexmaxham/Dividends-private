@@ -2,14 +2,13 @@
 // Project settings → General → Your apps → Web app → "SDK setup and configuration" → Config.
 // These values are not secrets: they identify the project, and the Firestore security rules in
 // firestore.rules are what keep each person's data private.
-// Until apiKey is filled in, the app runs on its own in the browser (sample data, CSV import, manual entry).
 const config = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: '',
+  apiKey: 'AIzaSyABdPd6x8aeEi3LREgSHTEJf3jEq0F_Z-U',
+  authDomain: 'dividends-c6017.firebaseapp.com',
+  projectId: 'dividends-c6017',
+  storageBucket: 'dividends-c6017.firebasestorage.app',
+  messagingSenderId: '774606066957',
+  appId: '1:774606066957:web:9bf44ffcf141affdc48c44',
 };
 
 export interface CloudConfig {
