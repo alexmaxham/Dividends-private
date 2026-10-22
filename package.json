@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "python3 server/server.py",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run && python3 -m unittest discover -s server",
-    "typecheck": "tsc -b"
+    "test": "vitest run",
+    "typecheck": "tsc -b",
+    "test:functions": "npm --prefix functions test && npm --prefix functions run test:emulator"
   },
   "dependencies": {
+    "firebase": "^13.1.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

@@ -1,7 +1,7 @@
 name: Deploy web app
 
-# Publishes the web app to GitHub Pages on every push to main. Pages has no server, so the hosted app runs on
-# sample data, CSV import or manual entry in the browser; Robinhood sync needs the Python server (see README).
+# Publishes the web app to GitHub Pages on every push to main. Sign-in, data and Plaid run on Firebase
+# (see backend.yml); until src/cloud/config.ts is filled in, the app runs on its own in the browser.
 on:
   push:
     branches: [main]
@@ -25,9 +25,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
       - run: npm ci
       - run: npm test
       - run: npm run build

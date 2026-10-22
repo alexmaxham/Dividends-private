@@ -42,7 +42,7 @@ export function Segmented<T extends string>({ value, options, onChange, label }:
   return (
     <div className="segmented" role="radiogroup" aria-label={label}>
       {options.map((o) => (
-        <button key={o.value} role="radio" aria-checked={value === o.value} className={value === o.value ? 'on' : ''} onClick={() => onChange(o.value)}>
+        <button key={o.value} type="button" role="radio" aria-checked={value === o.value} className={value === o.value ? 'on' : ''} onClick={() => onChange(o.value)}>
           {o.label}
         </button>
       ))}
@@ -61,7 +61,7 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
       <div className={`glass modal ${wide ? 'wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <header className="card-head">
           <h2>{title}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" /></button>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" /></button>
         </header>
         {children}
       </div>
@@ -102,6 +102,7 @@ const PATHS: Record<string, string> = {
   alert: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
   trash: 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14',
   edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
+  user: 'M20 21a8 8 0 0 0-16 0M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10z',
   shield: 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM8.5 12l2.5 2.5 4.5-5',
 };
 

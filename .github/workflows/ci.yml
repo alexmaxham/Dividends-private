@@ -1,6 +1,6 @@
 name: CI
 
-# Web logic (Vitest), the Python sync server (unittest, against fake Plaid and Robinhood APIs), and a production build.
+# Web app logic (Vitest) and a production build. The backend has its own workflow (backend.yml).
 on:
   push:
   pull_request:
@@ -15,9 +15,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
       - run: npm ci
       - run: npm test
       - run: npm run build

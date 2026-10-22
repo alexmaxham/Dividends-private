@@ -82,7 +82,6 @@ export interface Settings {
   theme: 'dark' | 'light' | 'system';
   /** 0.4 (very clear) - 1.6 (frosted). 1 is the default glass. */
   glass: number;
-  apiToken: string;
   taxRate: number;
 }
 

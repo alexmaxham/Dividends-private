@@ -1,30 +1,42 @@
 import { useRef, useState } from 'react';
-import { api, type ServerStatus } from '../lib/api';
-import { importCsv } from '../lib/csv';
-import { download } from '../lib/csv';
+import { cloudMessage, type LinkedAccount } from '../cloud/firebase';
+import { download, importCsv } from '../lib/csv';
 import { demoPortfolio } from '../lib/demo';
 import { dateLong, relativeTime } from '../lib/format';
 import { openPlaidLink } from '../lib/plaidLink';
-import { isSynced } from '../lib/types';
-import type { Portfolio } from '../lib/types';
-import type { Store } from '../useStore';
-import { Connect } from './Connect';
+import { isSynced, type Portfolio } from '../lib/types';
+import { EMPTY_PORTFOLIO, type Store } from '../useStore';
 import { Card, Icon, Segmented } from './ui';
 
+/** Runs Plaid Link: a new connection, or (with itemId) update mode to repair one whose login expired. */
+export async function linkWithPlaid(s: Store, itemId?: string) {
+  s.setError(null);
+  s.setBusy(true);
+  try {
+    const { linkToken } = await s.call<{ linkToken: string }>('plaidLinkToken', itemId ? { itemId } : {});
+    const result = await openPlaidLink(linkToken);
+    if (!result) return;
+    if (itemId) await s.call('plaidRepaired', { itemId });
+    else await s.call('plaidExchange', { publicToken: result.publicToken, institution: result.institution });
+  } catch (e) {
+    s.setError(cloudMessage(e));
+  } finally {
+    s.setBusy(false);
+  }
+}
+
 export function Settings({ s }: { s: Store }) {
-  const { settings, updateSettings, status, mode } = s;
-  const [connecting, setConnecting] = useState(false);
+  const { settings, updateSettings, mode } = s;
   const [note, setNote] = useState<string | null>(null);
-  const [tokenDraft, setTokenDraft] = useState(settings.apiToken);
   const csvRef = useRef<HTMLInputElement>(null);
   const backupRef = useRef<HTMLInputElement>(null);
-  const fromRobinhood = isSynced(s.portfolio);
-  const [linking, setLinking] = useState(false);
+  const synced = isSynced(s.portfolio) || s.linked;
+  const canEdit = !synced && mode !== 'signedOut' && mode !== 'loading';
 
   const onCsv = async (file: File) => {
     try {
       const r = importCsv(await file.text());
-      const base: Portfolio = s.portfolio.source === 'demo' ? { holdings: [], dividends: [], history: [], cash: 0, source: 'manual', syncedAt: null } : s.portfolio;
+      const base: Portfolio = s.portfolio.source === 'demo' ? EMPTY_PORTFOLIO : s.portfolio;
       if (r.kind === 'dividends') {
         const seen = new Set(base.dividends.map((d) => `${d.symbol}|${d.payDate}|${d.amount.toFixed(2)}`));
         const fresh = r.dividends.filter((d) => !seen.has(`${d.symbol}|${d.payDate}|${d.amount.toFixed(2)}`));
@@ -46,107 +58,37 @@ export function Settings({ s }: { s: Store }) {
       const data = JSON.parse(await file.text());
       if (!Array.isArray(data.portfolio?.holdings)) throw new Error('Not a dividend tracker backup.');
       s.replacePortfolio(data.portfolio);
-      if (data.settings) updateSettings({ ...data.settings, apiToken: settings.apiToken });
+      if (data.settings) updateSettings(data.settings);
       setNote('Backup restored.');
     } catch (e) {
       setNote((e as Error).message);
     }
   };
 
-  const changeServer = async (patch: { syncTime?: string; autoSync?: boolean }) => {
-    try { s.setStatus(await api.settings(patch)); } catch (e) { s.setError((e as Error).message); }
-  };
-
-  const disconnect = async () => {
-    if (!confirm('Disconnect Robinhood? Your synced data stays here until you load something else.')) return;
-    try { s.setStatus(await api.disconnect()); } catch (e) { s.setError((e as Error).message); }
-  };
-
-  /** Runs Plaid Link: a new connection, or (with itemId) update mode to repair one whose login expired. */
-  const linkPlaid = async (itemId?: string) => {
-    setLinking(true);
-    s.setError(null);
-    try {
-      const { linkToken } = await api.plaidLinkToken(itemId);
-      const result = await openPlaidLink(linkToken);
-      if (!result) return;
-      s.setStatus(itemId ? await api.plaidRepaired(itemId) : await api.plaidExchange(result.publicToken, result.institution));
-      await s.syncNow();
-    } catch (e) {
-      s.setError((e as Error).message);
-    } finally {
-      setLinking(false);
-    }
-  };
-
-  const unlink = async (itemId: string, name: string) => {
-    if (!confirm(`Unlink ${name}? Plaid's access is revoked right away. Your synced data stays here until you load something else.`)) return;
-    try { s.setStatus(await api.plaidRemove(itemId)); } catch (e) { s.setError((e as Error).message); }
-  };
-
   return (
     <div className="page settings">
-      <Card title={<><Icon name="link" /> Robinhood</>}>
-        {mode === 'server' && status?.needsToken && (
-          <form className="form" onSubmit={(e) => { e.preventDefault(); updateSettings({ apiToken: tokenDraft.trim() }); }}>
-            <p className="muted">This server is protected. Enter the APP_TOKEN it was started with.</p>
-            <label>Access token<input type="password" value={tokenDraft} onChange={(e) => setTokenDraft(e.target.value)} /></label>
-            <div className="form-actions"><span className="spacer" /><button className="btn primary">Save</button></div>
-          </form>
-        )}
-        {mode === 'server' && status && !status.needsToken && (
+      {mode === 'cloud' && <AccountCard s={s} />}
+
+      <Card title={<><Icon name="link" /> Brokerage accounts</>}>
+        {mode === 'cloud' ? (
+          <PlaidPanel s={s} />
+        ) : mode === 'local' ? (
+          <p className="muted">Linking Robinhood and other brokerages needs accounts, which aren't set up on this copy of the app. See the README to connect it to Firebase.</p>
+        ) : (
           <div className="form">
-            {status.provider === 'plaid' ? (
-              <PlaidPanel status={status} busy={s.busy} linking={linking} onLink={linkPlaid} onUnlink={unlink} onSync={s.syncNow} />
-            ) : (
-            <div className="conn">
-              <span className={`status-dot ${status.connected ? 'on' : ''}`} />
-              <div>
-                <b>{status.connected ? `Connected${status.username ? ` as ${status.username}` : ''}` : 'Not connected'}</b>
-                <small className="muted">
-                  Last sync {relativeTime(status.lastSync)}
-                  {status.nextSync && <> · next {relativeTime(status.nextSync)}</>}
-                </small>
-              </div>
-              <span className="spacer" />
-              {status.connected ? (
-                <>
-                  <button className="btn" onClick={s.syncNow} disabled={s.busy}><Icon name="sync" /> {s.busy ? 'Syncing…' : 'Sync now'}</button>
-                  <button className="btn danger" onClick={disconnect}>Disconnect</button>
-                </>
-              ) : <button className="btn primary" onClick={() => setConnecting(true)}>Connect Robinhood</button>}
-            </div>
-            )}
-            {status.lastError && <p className="error"><Icon name="alert" size={16} /> {status.lastError}</p>}
-            <div className="form">
-              <label className="switch-row">
-                <span>Update automatically every day</span>
-                <input type="checkbox" className="switch" checked={status.settings.autoSync} onChange={(e) => changeServer({ autoSync: e.target.checked })} />
-              </label>
-              <label className="switch-row">Daily sync at
-                <input type="time" value={status.settings.syncTime} onChange={(e) => e.target.value && changeServer({ syncTime: e.target.value })} disabled={!status.settings.autoSync} />
-              </label>
-            </div>
-            <p className="muted small">After the 4 pm close is a good time. If the server was off at that time, it catches up the next time it runs.</p>
+            <p>Sign in to link Robinhood or another brokerage with Plaid. Your portfolio then updates every morning and follows you to any device.</p>
+            <div><button className="btn primary" onClick={() => s.setExploring(false)}>Sign in or create an account</button></div>
           </div>
         )}
-        {mode === 'local' && (
-          <div className="form">
-            <p>Robinhood sync runs through a small server you run yourself, which links your account with Plaid. This page isn't connected to one.</p>
-            <pre className="code">npm install && npm run build{'\n'}PLAID_CLIENT_ID=… PLAID_SECRET=… python3 server/server.py</pre>
-            <p className="muted small">Then open http://127.0.0.1:8787. Until then you can explore with the sample data, import a CSV, or add holdings by hand.</p>
-          </div>
-        )}
-        {mode === 'loading' && <p className="muted">Looking for the sync server…</p>}
       </Card>
 
       <Card title={<><Icon name="target" /> Goals</>}>
         <div className="form-row">
           <label className="field">Monthly income goal
-            <span className="input-affix"><i>$</i><input type="number" min={0} step={50} value={settings.monthlyGoal} onChange={(e) => updateSettings({ monthlyGoal: Number(e.target.value) })} /></span>
+            <span className="input-affix"><i>$</i><input id="goal" type="number" min={0} step={50} value={settings.monthlyGoal} onChange={(e) => updateSettings({ monthlyGoal: Number(e.target.value) })} /></span>
           </label>
           <label className="field">Dividend tax rate (for the planner)
-            <span className="input-affix"><input type="number" min={0} max={60} value={settings.taxRate} onChange={(e) => updateSettings({ taxRate: Number(e.target.value) })} /><i>%</i></span>
+            <span className="input-affix"><input id="tax" type="number" min={0} max={60} value={settings.taxRate} onChange={(e) => updateSettings({ taxRate: Number(e.target.value) })} /><i>%</i></span>
           </label>
         </div>
       </Card>
@@ -173,20 +115,26 @@ export function Settings({ s }: { s: Store }) {
       <Card title={<><Icon name="upload" /> Data</>}>
         <div className="form">
           <p className="muted small">
-            Showing <b>{s.portfolio.source === 'demo' ? 'sample data' : fromRobinhood ? 'your synced portfolio' : 'your own data'}</b>.
-            {fromRobinhood ? ' Synced data is read-only here; your brokerage is the source.' : ' Import Robinhood’s account activity report (Account → Reports and statements) for your dividend history, or a CSV with Symbol, Shares, Average Cost and Price columns for holdings.'}
+            Showing <b>{s.portfolio.source === 'demo' ? 'sample data' : synced ? 'your synced portfolio' : 'your own data'}</b>
+            {mode === 'cloud' ? ', saved to your account.' : mode === 'local' ? ', saved in this browser.' : '.'}
+            {synced ? ' Synced data is read-only here; your brokerage is the source.'
+              : canEdit ? ' Import Robinhood’s account activity report (Account → Reports and statements) for your dividend history, or a CSV with Symbol, Shares, Average Cost and Price columns for holdings.' : ''}
           </p>
           <div className="btn-row">
-            {!fromRobinhood && <button className="btn" onClick={() => csvRef.current?.click()}><Icon name="upload" /> Import CSV</button>}
-            <button className="btn" onClick={() => download(`dividend-tracker-backup-${s.today}.json`, JSON.stringify({ portfolio: s.portfolio, settings: { ...settings, apiToken: '' } }, null, 1), 'application/json')}>
+            {canEdit && <button className="btn" onClick={() => csvRef.current?.click()}><Icon name="upload" /> Import CSV</button>}
+            <button className="btn" onClick={() => download(`dividends-backup-${s.today}.json`, JSON.stringify({ portfolio: s.portfolio, settings }, null, 1), 'application/json')}>
               <Icon name="download" /> Back up
             </button>
-            <button className="btn" onClick={() => backupRef.current?.click()}>Restore backup</button>
-            {!fromRobinhood && s.portfolio.source !== 'demo' && <button className="btn" onClick={() => { s.replacePortfolio(demoPortfolio()); setNote('Sample data loaded.'); }}>Load sample data</button>}
-            {s.portfolio.source === 'demo' && (
-              <button className="btn" onClick={() => { s.replacePortfolio({ holdings: [], dividends: [], history: [], cash: 0, source: 'manual', syncedAt: null }); setNote('Started fresh. Add holdings or import a CSV.'); }}>
-                Start from scratch
-              </button>
+            {canEdit && <button className="btn" onClick={() => backupRef.current?.click()}>Restore backup</button>}
+            {mode === 'local' && s.portfolio.source !== 'demo' && (
+              <button className="btn" onClick={() => { s.replacePortfolio(demoPortfolio()); setNote('Sample data loaded.'); }}>Load sample data</button>
+            )}
+            {canEdit && (s.portfolio.source === 'demo' || s.portfolio.holdings.length > 0) && (
+              <button className="btn" onClick={() => {
+                if (s.portfolio.source !== 'demo' && !confirm('Clear all holdings and dividends? Back up first if you might want them.')) return;
+                s.replacePortfolio(EMPTY_PORTFOLIO);
+                setNote('Started fresh. Add holdings or import a CSV.');
+              }}>Start from scratch</button>
             )}
           </div>
           {note && <p className="note">{note}</p>}
@@ -194,60 +142,118 @@ export function Settings({ s }: { s: Store }) {
           <input ref={backupRef} type="file" accept=".json,application/json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void onBackup(f); e.target.value = ''; }} />
         </div>
       </Card>
-
-      {connecting && <Connect onClose={() => setConnecting(false)} onDone={async () => { await s.syncNow(); await s.refresh(); setConnecting(false); }} />}
     </div>
   );
 }
 
-function PlaidPanel({ status, busy, linking, onLink, onUnlink, onSync }: {
-  status: ServerStatus; busy: boolean; linking: boolean;
-  onLink: (itemId?: string) => void; onUnlink: (itemId: string, name: string) => void; onSync: () => void;
-}) {
+function PlaidPanel({ s }: { s: Store }) {
+  const accounts: LinkedAccount[] = s.profile.accounts ?? [];
+  const sync = s.profile.sync ?? {};
+
+  const unlink = async (a: LinkedAccount) => {
+    if (!confirm(`Unlink ${a.institution}? Plaid's access is revoked right away. Your synced history stays in your account.`)) return;
+    s.setBusy(true);
+    try { await s.call('plaidUnlink', { itemId: a.itemId }); } catch (e) { s.setError(cloudMessage(e)); } finally { s.setBusy(false); }
+  };
+
   return (
-    <>
+    <div className="form">
       <div className="trust">
         <Icon name="shield" size={22} />
         <div>
           <b>Connected securely with Plaid</b>
           <p className="muted small">
-            You sign in on Plaid's and Robinhood's own screens. This app never sees your password; it gets read-only
-            access to holdings and investment transactions, and can't trade or move money. Unlink here or at my.plaid.com any time.
+            You sign in on Plaid's and your brokerage's own screens. This app never sees your brokerage password; it gets
+            read-only access to holdings and investment transactions, and can't trade or move money. Unlink here or at my.plaid.com any time.
           </p>
         </div>
       </div>
-      {status.plaidEnv === 'sandbox' && (
-        <p className="note small">Plaid sandbox: pick any bank and sign in with <b>user_good</b> / <b>pass_good</b>. Switch the server to PLAID_ENV=production for real accounts.</p>
-      )}
-      {status.accounts.length > 0 && (
+      {accounts.length > 0 && (
         <ul className="rows compact">
-          {status.accounts.map((a) => (
+          {accounts.map((a) => (
             <li key={a.itemId}>
               <span className={`status-dot ${a.needsReauth ? 'warn' : 'on'}`} />
               <div className="row-main">
                 <b>{a.institution}</b>
                 <small>{a.needsReauth ? 'Sign-in expired. Reconnect to keep syncing.' : `Linked ${dateLong(a.linkedAt.slice(0, 10))}`}</small>
               </div>
-              {a.needsReauth && <button className="btn primary" onClick={() => onLink(a.itemId)} disabled={linking}>Reconnect</button>}
-              <button className="btn danger" onClick={() => onUnlink(a.itemId, a.institution)}>Unlink</button>
+              {a.needsReauth && <button className="btn primary" onClick={() => linkWithPlaid(s, a.itemId)} disabled={s.busy}>Reconnect</button>}
+              <button className="btn danger" onClick={() => unlink(a)} disabled={s.busy}>Unlink</button>
             </li>
           ))}
         </ul>
       )}
       <div className="conn">
         <div>
-          <b>{status.connected ? `${status.accounts.length} account${status.accounts.length === 1 ? '' : 's'} linked` : 'Not connected'}</b>
+          <b>{accounts.length ? `${accounts.length} account${accounts.length === 1 ? '' : 's'} linked` : 'No accounts linked yet'}</b>
           <small className="muted">
-            Last sync {relativeTime(status.lastSync)}
-            {status.nextSync && <> · next {relativeTime(status.nextSync)}</>}
+            {accounts.length ? <>Last sync {relativeTime(sync.lastSync ?? null)} · updates every morning</> : 'Robinhood, Fidelity, Schwab, Vanguard and most other US brokerages'}
           </small>
         </div>
         <span className="spacer" />
-        {status.connected && <button className="btn" onClick={onSync} disabled={busy}><Icon name="sync" /> {busy ? 'Syncing…' : 'Sync now'}</button>}
-        <button className={`btn ${status.connected ? '' : 'primary'}`} onClick={() => onLink()} disabled={linking}>
-          <Icon name="link" /> {linking ? 'Opening Plaid…' : status.connected ? 'Link another account' : 'Link Robinhood with Plaid'}
+        {accounts.length > 0 && (
+          <button className="btn" onClick={s.syncNow} disabled={s.busy || sync.syncing}><Icon name="sync" /> {s.busy || sync.syncing ? 'Syncing…' : 'Sync now'}</button>
+        )}
+        <button className={`btn ${accounts.length ? '' : 'primary'}`} onClick={() => linkWithPlaid(s)} disabled={s.busy}>
+          <Icon name="link" /> {accounts.length ? 'Link another account' : 'Link a brokerage'}
         </button>
       </div>
-    </>
+      {sync.lastError && <p className="error"><Icon name="alert" size={16} /> {sync.lastError}</p>}
+      {!s.linked && s.portfolio.holdings.length > 0 && (
+        <p className="muted small">Linking replaces the holdings you entered by hand with the ones from your brokerage.</p>
+      )}
+    </div>
+  );
+}
+
+function AccountCard({ s }: { s: Store }) {
+  const [view, setView] = useState<'idle' | 'password' | 'delete'>('idle');
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirmText, setConfirmText] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
+
+  const run = async (fn: () => Promise<unknown>, done: string) => {
+    setWorking(true);
+    setErr(null);
+    try { await fn(); setMsg(done); setView('idle'); setCurrent(''); setNext(''); } catch (e) { setErr(cloudMessage(e)); } finally { setWorking(false); }
+  };
+
+  return (
+    <Card title={<><Icon name="user" /> Account</>}>
+      <div className="form">
+        <div className="conn">
+          <div>
+            <b>{s.user?.email}</b>
+            <small className="muted">{s.user?.emailVerified ? 'Email verified' : 'Check your inbox to verify your email'}</small>
+          </div>
+          <span className="spacer" />
+          <button className="btn" onClick={() => setView(view === 'password' ? 'idle' : 'password')}>Change password</button>
+          <button className="btn" onClick={() => s.cloud?.signOut()}>Sign out</button>
+        </div>
+        {view === 'password' && (
+          <form className="form" onSubmit={(e) => { e.preventDefault(); void run(() => s.cloud!.changePassword(current, next), 'Password changed.'); }}>
+            <div className="form-row">
+              <label>Current password<input id="pw-current" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required /></label>
+              <label>New password<input id="pw-new" type="password" autoComplete="new-password" minLength={8} value={next} onChange={(e) => setNext(e.target.value)} required /></label>
+            </div>
+            <div className="form-actions"><span className="spacer" /><button type="button" className="btn" onClick={() => setView('idle')}>Cancel</button><button className="btn primary" disabled={working}>Save password</button></div>
+          </form>
+        )}
+        {view === 'delete' ? (
+          <form className="form danger-zone" onSubmit={(e) => { e.preventDefault(); void run(() => s.call('deleteAccount').then(() => s.cloud?.signOut()), 'Account deleted.'); }}>
+            <p><b>Delete your account?</b> This unlinks every brokerage at Plaid and permanently erases your portfolio, history and settings. It can't be undone.</p>
+            <label>Type DELETE to confirm<input id="delete-confirm" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} autoComplete="off" /></label>
+            <div className="form-actions"><span className="spacer" /><button type="button" className="btn" onClick={() => setView('idle')}>Cancel</button><button className="btn danger" disabled={working || confirmText !== 'DELETE'}>{working ? 'Deleting…' : 'Delete account'}</button></div>
+          </form>
+        ) : (
+          <div><button className="link-btn danger-link" onClick={() => setView('delete')}>Delete account…</button></div>
+        )}
+        {msg && <p className="note">{msg}</p>}
+        {err && <p className="error"><Icon name="alert" size={16} /> {err}</p>}
+      </div>
+    </Card>
   );
 }

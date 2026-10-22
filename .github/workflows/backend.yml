@@ -1,0 +1,87 @@
+name: Deploy backend
+
+# Tests the Cloud Functions and Firestore rules on the emulator, then deploys them to Firebase.
+# Deploys only once these are set in the repository's Settings → Secrets and variables → Actions:
+#   Variable  FIREBASE_PROJECT_ID         the Firebase project ID
+#   Secret    FIREBASE_SERVICE_ACCOUNT    JSON key of a service account allowed to deploy (see README)
+#   Secrets   PLAID_CLIENT_ID, PLAID_SECRET   copied into Google Secret Manager on each deploy
+on:
+  push:
+    branches: [main]
+    paths: ['functions/**', 'firestore.rules', 'firestore.indexes.json', 'firebase.json', '.github/workflows/backend.yml']
+  pull_request:
+    paths: ['functions/**', 'firestore.rules', 'firestore.indexes.json', 'firebase.json', '.github/workflows/backend.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: backend
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:emulator
+
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      PROJECT: ${{ vars.FIREBASE_PROJECT_ID }}
+      HAS_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+    steps:
+      - name: Check setup
+        id: ready
+        run: |
+          if [ -z "$PROJECT" ] || [ "$HAS_KEY" != "true" ]; then
+            echo "::notice::Backend not deployed: set the FIREBASE_PROJECT_ID variable and FIREBASE_SERVICE_ACCOUNT secret (see README)."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.ready.outputs.go == 'true'
+        uses: actions/checkout@v5
+      - if: steps.ready.outputs.go == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - if: steps.ready.outputs.go == 'true'
+        run: npm ci
+        working-directory: functions
+      - if: steps.ready.outputs.go == 'true'
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Store Plaid keys in Secret Manager
+        if: steps.ready.outputs.go == 'true'
+        env:
+          PLAID_CLIENT_ID: ${{ secrets.PLAID_CLIENT_ID }}
+          PLAID_SECRET: ${{ secrets.PLAID_SECRET }}
+        run: |
+          for name in PLAID_CLIENT_ID PLAID_SECRET; do
+            value="${!name}"
+            if [ -z "$value" ]; then echo "::warning::$name isn't set as a repository secret; keeping the value already in Secret Manager."; continue; fi
+            printf '%s' "$value" | npx --prefix functions firebase functions:secrets:set "$name" --data-file - --project "$PROJECT" --non-interactive --force
+          done
+      - name: Deploy rules and functions
+        if: steps.ready.outputs.go == 'true'
+        run: npx --prefix functions firebase deploy --only firestore,functions --project "$PROJECT" --non-interactive --force

@@ -17,7 +17,7 @@ export function Dividends({ s, openHolding }: { s: Store; openHolding: (sym: str
   const [state, setState] = useState<StateFilter>('all');
   const [q, setQ] = useState('');
   const [logging, setLogging] = useState(false);
-  const editable = !isSynced(s.portfolio);
+  const editable = !isSynced(s.portfolio) && s.mode !== 'signedOut' && !s.linked;
 
   const years = useMemo(() => [...new Set(s.portfolio.dividends.map((d) => d.payDate.slice(0, 4)))].sort().reverse(), [s.portfolio.dividends]);
 

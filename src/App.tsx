@@ -6,8 +6,9 @@ import { Holdings } from './components/Holdings';
 import { Insights } from './components/Insights';
 import { Overview } from './components/Overview';
 import { Planner } from './components/Planner';
-import { Settings } from './components/Settings';
-import { Icon, PrivacyContext } from './components/ui';
+import { AuthScreen } from './components/AuthScreen';
+import { linkWithPlaid, Settings } from './components/Settings';
+import { Card, Icon, PrivacyContext } from './components/ui';
 import { relativeTime } from './lib/format';
 import { useStore } from './useStore';
 
@@ -65,8 +66,20 @@ export function App() {
   );
   const go = (t: string) => { location.hash = t; window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const open = (sym: string) => setDetail(sym);
-  const st = s.status;
-  const connected = s.mode === 'server' && st?.connected;
+  const sync = s.profile.sync ?? {};
+  const syncing = s.busy || !!sync.syncing;
+  const needsReauth = s.profile.accounts?.some((a) => a.needsReauth);
+  const isEmpty = s.mode === 'cloud' && s.portfolioLoaded && !s.linked && !s.portfolio.holdings.length && !s.portfolio.dividends.length;
+  const signedOut = s.mode === 'signedOut' || s.mode === 'loading';
+
+  if (s.mode === 'loading' || (s.mode === 'signedOut' && !s.exploring)) {
+    return (
+      <>
+        <div className="backdrop" aria-hidden="true"><i /><i /><i /><i /></div>
+        {s.mode === 'loading' ? <div className="splash"><span className="brand-mark big" aria-hidden="true">$</span></div> : <AuthScreen s={s} />}
+      </>
+    );
+  }
 
   return (
     <PrivacyContext.Provider value={s.settings.privacy}>
@@ -79,22 +92,29 @@ export function App() {
           </div>
           {nav('top')}
           <div className="top-actions">
-            {connected && st?.accounts?.some((x) => x.needsReauth) ? (
+            {s.mode === 'cloud' && s.linked && needsReauth ? (
               <button className="sync-pill glass-chip" onClick={() => go('settings')}>
                 <span className="status-dot warn" />
                 <span>Reconnect needed</span>
               </button>
-            ) : connected ? (
-              <button className="sync-pill glass-chip" onClick={s.syncNow} disabled={s.busy || st?.syncing} title={st?.nextSync ? `Next automatic sync ${relativeTime(st.nextSync)}` : undefined}>
-                <span className={`status-dot on ${s.busy || st?.syncing ? 'busy' : ''}`} />
-                <span>{s.busy || st?.syncing ? 'Syncing…' : `Synced ${relativeTime(st?.lastSync ?? null)}`}</span>
+            ) : s.mode === 'cloud' && s.linked ? (
+              <button className="sync-pill glass-chip" onClick={s.syncNow} disabled={syncing} title="Updates every morning. Click to sync now.">
+                <span className={`status-dot on ${syncing ? 'busy' : ''}`} />
+                <span>{syncing ? 'Syncing…' : `Synced ${relativeTime(sync.lastSync ?? null)}`}</span>
                 <Icon name="sync" size={15} />
               </button>
-            ) : (
-              <button className="sync-pill glass-chip" onClick={() => go('settings')}>
+            ) : s.mode === 'cloud' ? (
+              <button className="sync-pill glass-chip" onClick={() => linkWithPlaid(s)} disabled={s.busy}>
                 <span className="status-dot" />
-                <span>{s.mode === 'server' ? 'Connect Robinhood' : s.portfolio.source === 'demo' ? 'Sample data' : 'Offline'}</span>
+                <span>Link a brokerage</span>
               </button>
+            ) : signedOut ? (
+              <button className="sync-pill glass-chip" onClick={() => s.setExploring(false)}>
+                <Icon name="user" size={15} />
+                <span>Sign in</span>
+              </button>
+            ) : (
+              <span className="sync-pill glass-chip"><span className="status-dot" /><span>{s.portfolio.source === 'demo' ? 'Sample data' : 'On this device'}</span></span>
             )}
             <button className="icon-btn glass-chip" onClick={() => s.updateSettings({ privacy: !s.settings.privacy })} aria-label={s.settings.privacy ? 'Show amounts' : 'Hide amounts'} aria-pressed={s.settings.privacy}>
               <Icon name={s.settings.privacy ? 'eyeOff' : 'eye'} />
@@ -105,7 +125,9 @@ export function App() {
         {s.portfolio.source === 'demo' && tab !== 'settings' && (
           <div className="banner glass-chip">
             <span>You're looking at a sample portfolio.</span>
-            <button className="link-btn" onClick={() => go('settings')}>{s.mode === 'server' ? 'Connect Robinhood' : 'Use your own data'} →</button>
+            {signedOut
+              ? <button className="link-btn" onClick={() => s.setExploring(false)}>Sign in to track yours →</button>
+              : <button className="link-btn" onClick={() => go('settings')}>Use your own data →</button>}
           </div>
         )}
         {s.error && (
@@ -117,7 +139,7 @@ export function App() {
 
         <main>
           <h1 className="page-title">{TABS.find((t) => t.id === tab)?.label}</h1>
-          {tab === 'overview' && <Overview s={s} openHolding={open} goTo={go} />}
+          {tab === 'overview' && (isEmpty ? <Welcome s={s} goTo={go} /> : <Overview s={s} openHolding={open} goTo={go} />)}
           {tab === 'holdings' && <Holdings s={s} openHolding={open} />}
           {tab === 'dividends' && <Dividends s={s} openHolding={open} />}
           {tab === 'calendar' && <Calendar s={s} openHolding={open} />}
@@ -129,5 +151,34 @@ export function App() {
       {nav('bottom')}
       {detail && <HoldingDetail s={s} symbol={detail} onClose={() => setDetail(null)} />}
     </PrivacyContext.Provider>
+  );
+}
+
+/** First run for a signed-in person with nothing yet: the three ways to get their portfolio in. */
+function Welcome({ s, goTo }: { s: ReturnType<typeof useStore>; goTo: (tab: string) => void }) {
+  return (
+    <div className="page">
+      <Card className="welcome">
+        <h2>Welcome{s.user?.email ? `, ${s.user.email.split('@')[0]}` : ''}</h2>
+        <p className="muted">Bring in your portfolio to see your dividend income, upcoming payouts and growth.</p>
+        <div className="welcome-options">
+          <button className="welcome-option primary-option" onClick={() => linkWithPlaid(s)} disabled={s.busy}>
+            <Icon name="link" size={22} />
+            <b>Link Robinhood or another brokerage</b>
+            <span>Securely through Plaid. Updates every morning.</span>
+          </button>
+          <button className="welcome-option" onClick={() => goTo('settings')}>
+            <Icon name="upload" size={22} />
+            <b>Import a CSV</b>
+            <span>Robinhood's activity report or a list of holdings.</span>
+          </button>
+          <button className="welcome-option" onClick={() => goTo('holdings')}>
+            <Icon name="plus" size={22} />
+            <b>Add holdings by hand</b>
+            <span>Type in what you own and log dividends as they arrive.</span>
+          </button>
+        </div>
+      </Card>
+    </div>
   );
 }

@@ -1,94 +1,88 @@
 # Dividends
 
-A dividend portfolio tracker with a Liquid Glass look. It links Robinhood through Plaid, refreshes once a day, and shows:
+A dividend portfolio tracker with a Liquid Glass look. People create an account, link Robinhood or another brokerage through Plaid, and see their own portfolio, updated every morning, on any device.
+
+**Web app:** https://alexmaxham.github.io/Dividends-private/
 
 - **Overview**: portfolio value and day change, forward annual income (also per month and per day), yield and yield on cost, dividends received this year compared with last year, this month's income, all-time totals, a 24-month income chart (12 months received, 12 projected), upcoming payouts, progress toward a monthly income goal, a full-year outlook, and value history.
 - **Holdings**: a sortable, searchable table with value, gain, yield, yield on cost, annual income, weight and payment frequency. Click a holding for its detail: per-share payment history, next payments, dividend growth and how much it has paid you in total.
 - **Dividends**: every payment, grouped by month and filterable by year, status and symbol, with CSV export. It also lists everything expected in the next 12 months.
-- **Calendar**: the next 12 months of payouts, marked paid, confirmed by Robinhood, or estimated.
+- **Calendar**: the next 12 months of payouts, marked paid, confirmed, or estimated.
 - **Insights**: income by year, allocation by sector and by holding (by income or by value), payment schedule mix, each holding's dividend growth over the last year, and a checkup that flags concentration, dividend cuts and very high yields.
 - **Planner**: a compounding projection (DRIP on or off, contributions, dividend and price growth, tax) that shows when you'd reach your income goal.
-- **Settings**: linked accounts and the daily sync time, income goal, dark/light theme, a glass slider from clear to frosted, privacy mode (hides every dollar amount), CSV import, and JSON backup and restore.
+- **Settings**: account (password, sign out, delete account), linked brokerages, income goal, dark/light theme, a glass slider from clear to frosted, privacy mode (hides every dollar amount), CSV import, and JSON backup and restore.
 
-## Connect Robinhood (through Plaid)
+## How it works
 
-Accounts connect with [Plaid](https://plaid.com), the service behind most finance apps. You sign in to Robinhood on Plaid's and Robinhood's own screens; this app never sees your password. It gets read-only access to holdings and investment transactions, can't trade or move money, and you can unlink at any time (in Settings or at my.plaid.com). Plaid also works with most other US brokerages, so you can link several and see them together.
-
-Linking and the daily update run on a small server you host yourself. It uses only Python's standard library and also serves the web app.
-
-1. Create a free account at https://dashboard.plaid.com. Under **Developers → Keys**, copy your client ID and the **Sandbox** secret.
-2. Build and start:
-   ```bash
-   git clone https://github.com/alexmaxham/Dividends-private.git dividends && cd dividends
-   npm install && npm run build
-   PLAID_CLIENT_ID=your-id PLAID_SECRET=your-sandbox-secret python3 server/server.py   # http://127.0.0.1:8787
-   ```
-3. Open the page, go to **Settings → Link Robinhood with Plaid**, and pick a bank. In the sandbox, sign in with `user_good` / `pass_good` to get Plaid's test investment accounts.
-4. For your real Robinhood account, request **Production** access in the Plaid dashboard with the **Investments** product enabled. Then restart with `PLAID_ENV=production` and the production secret, and link again. Plaid charges for Investments in production; check the dashboard for current pricing.
-
-Once linked, the server:
-
-- syncs holdings, prices, cost basis, sectors and up to 24 months of dividends every day at the time you choose (default 6:30 pm), catches up if it was off, and keeps older dividends from earlier syncs, so history keeps growing past 24 months,
-- records a daily value snapshot for the value chart and uses yesterday's price for the day's change,
-- flags an account with **Reconnect** if Robinhood asks you to sign in again, which reopens Plaid to fix it.
-
-Plaid doesn't report announced (future) dividends or per-share rates. The app works out each payment's share count from your buys and sells, and the calendar estimates upcoming payments from each holding's schedule.
-
-The open page re-checks the server every 10 minutes and whenever you come back to the tab. **Sync now** updates on demand.
-
-### Keep it running
-
-- **Docker**: `docker build -t dividends . && docker run -d --restart unless-stopped -p 8787:8787 -v dividends-data:/app/data -e TZ=America/New_York -e PLAID_CLIENT_ID=… -e PLAID_SECRET=… -e PLAID_ENV=production -e APP_TOKEN=pick-a-long-secret dividends`
-- **Without Docker**: run the server from a login item, a systemd service or launchd, on any always-on machine (a Raspberry Pi works).
-
-Settings (environment variables):
-
-| Variable | Default | |
+| Part | Where it runs | What it does |
 |---|---|---|
-| `PLAID_CLIENT_ID`, `PLAID_SECRET` | none | From the Plaid dashboard. Without them the server falls back to direct Robinhood sign-in (below). |
-| `PLAID_ENV` | `sandbox` | `production` for real accounts. |
-| `PLAID_REDIRECT_URI` | none | Only needed for OAuth sign-in on phone browsers: an https URL that serves this app, registered in the Plaid dashboard. |
-| `PORT` | `8787` | |
-| `HOST` | `127.0.0.1` | Set to `0.0.0.0` to open it from your phone on the same network. |
-| `APP_TOKEN` | none | Required for every API call when set. **Set it whenever `HOST` isn't localhost**, then enter it in Settings. |
-| `DATA_DIR` | `data/` in the project | Holds Plaid access tokens (`plaid.json`, readable by its owner only) and the synced portfolio. |
-| `TZ` | machine's | The time zone the daily sync time is read in. |
+| Web app (`src/`) | GitHub Pages | The screens. Installable to the home screen and opens offline. |
+| Sign-in | Firebase Authentication | Email and password accounts, with password reset. |
+| Data | Cloud Firestore | Each person's settings, linked brokerages and portfolio, readable only by them (`firestore.rules`). |
+| Plaid + daily sync (`functions/`) | Cloud Functions | Creates Plaid Link tokens, stores Plaid access tokens where no browser can read them, syncs each person's holdings and dividends every morning at 6:30 am Eastern, and deletes everything when someone deletes their account. |
 
-### Security
+People sign in to their brokerage on Plaid's and the brokerage's own screens, so the app never sees those passwords. Plaid gives read-only access to holdings and investment transactions; the app can't trade or move money. Plaid's secret lives in Google Secret Manager and is only used by Cloud Functions.
 
-- Your Robinhood password goes only to Plaid and Robinhood. The server stores Plaid access tokens in `data/plaid.json` with mode 600 and never sends them to the browser. **Unlink** revokes them at Plaid.
-- Don't expose the server to the internet without `APP_TOKEN` and HTTPS (for example, behind Tailscale or a reverse proxy).
+Without an account, anyone can look around with sample data. Until the Firebase config is filled in (step 6 below), the app skips sign-in and runs on its own in the browser.
 
-### Fallback: direct Robinhood sign-in
+## One-time setup
 
-If the server starts without Plaid keys, **Connect Robinhood** signs in to Robinhood directly: you enter your email and password in the page (they go to your server, then Robinhood, and aren't saved). This uses Robinhood's private website API (the one the open-source robin_stocks project documents), so it can break when Robinhood changes it, and it isn't affiliated with Robinhood. Plaid is the recommended way.
+You can do all of this from a browser.
 
-## Web app
+1. **Create the Firebase project.** At https://console.firebase.google.com, add a project (Google Analytics isn't needed). Then switch it to the **Blaze** pay-as-you-go plan (bottom left → Upgrade): Cloud Functions require it. At this size usage stays within the free allowance, but a card is required. Setting a budget alert at a few dollars is a good idea.
+2. **Turn on sign-in.** Build → **Authentication** → Get started → Sign-in method → **Email/Password** → Enable. Then Authentication → Settings → **Authorized domains** → add `alexmaxham.github.io`.
+3. **Create the database.** Build → **Firestore Database** → Create database → production mode, any US location. (The deploy in step 5 installs the security rules.)
+4. **Give GitHub permission to deploy.** In https://console.cloud.google.com/iam-admin/serviceaccounts for the same project, create a service account named `github-deploy` with these roles: *Firebase Admin*, *Cloud Functions Admin*, *Cloud Scheduler Admin*, *Secret Manager Admin*, *Service Account User*, *Artifact Registry Administrator* and *Cloud Build Editor*. Open it → Keys → Add key → JSON, and download the file.
+5. **Add the repository settings.** In this repo's Settings → Secrets and variables → Actions:
+   - Variables tab: `FIREBASE_PROJECT_ID` = your project ID (shown in Firebase → Project settings).
+   - Secrets tab: `FIREBASE_SERVICE_ACCOUNT` = the whole contents of the JSON key file; `PLAID_CLIENT_ID` and `PLAID_SECRET` = your keys from https://dashboard.plaid.com → Developers → Keys (the **Sandbox** secret to start).
 
-Every push to `main` publishes the app to GitHub Pages at **https://alexmaxham.github.io/Dividends-private/** (`.github/workflows/pages.yml`). It's installable: on iPhone, open it in Safari and choose Share → Add to Home Screen; in Chrome or Edge, use the install icon in the address bar. It also opens offline.
+   Then run **Actions → Deploy backend → Run workflow**. It tests the functions and rules, stores the Plaid keys in Secret Manager, and deploys.
+6. **Connect the web app.** Firebase → Project settings → General → Your apps → add a **Web** app, and copy its `firebaseConfig` values into `src/cloud/config.ts`. Commit to `main`; GitHub Pages redeploys and the app now shows the sign-in screen.
 
-The hosted copy has no server behind it, so it works as described below; Robinhood sync needs the server.
+In the Plaid sandbox, link any institution with `user_good` / `pass_good` to get Plaid's test brokerage accounts.
 
-One-time setup: in the repository's **Settings → Pages**, set **Source** to **GitHub Actions**.
+### Going live with real brokerages
 
-## Without the server
+1. In the Plaid dashboard, request **Production** access with the **Investments** product. Plaid reviews the app and asks some security questions. Plaid charges for Investments in production; check the dashboard for pricing.
+2. Change `PLAID_ENV=sandbox` to `PLAID_ENV=production` in `functions/.env`, replace the `PLAID_SECRET` repository secret with the production secret, and run **Deploy backend** again. Links made in the sandbox don't carry over, so people link again.
+3. Optional: for OAuth brokerages on phone browsers, register an https redirect URI (a page of this app) in Plaid and set `PLAID_REDIRECT_URI` in `functions/.env`.
 
-When the page isn't served by the sync server (for example `npm run dev` without the server, or a static copy of `dist/`), it runs on its own and saves to this browser:
+## Data and privacy
 
-- It starts with a **sample portfolio** so you can look around.
-- **Import CSV** takes Robinhood's account activity report (Account → Reports and statements; rows coded `CDIV` become dividends) or a holdings list with `Symbol`, `Shares`, `Average Cost` and `Price` columns.
-- You can add and edit holdings and log dividends by hand. Prices don't update in this mode.
+- `users/{uid}`: the person's settings, the list of linked brokerages (names only) and sync status.
+- `users/{uid}/portfolio/current`: holdings, dividends, value history. Written by Cloud Functions for linked accounts; people can edit their own only while no brokerage is linked (manual entry and CSV import).
+- `plaidItems/{itemId}`: Plaid access tokens. The security rules block all access from the app; only Cloud Functions read them.
+- **Unlink** revokes Plaid's access immediately. **Delete account** revokes every link at Plaid, erases all of the person's documents and deletes their sign-in.
 
 ## How the numbers work
 
-- **Forward income**: the latest per-share payment × payments per year × shares. The frequency comes from the gaps between recent payments, or from the reported yield when there's only one payment. Holdings with no payment history fall back to Robinhood's reported yield.
-- **Upcoming payouts**: announced dividends when the connection reports them (direct Robinhood sign-in does; Plaid doesn't), then estimates that continue each holding's schedule at the current rate and share count.
+- **Forward income**: the latest per-share payment × payments per year × shares. The frequency comes from the gaps between recent payments, or from the reported yield when there's only one payment.
+- **Per-share rates**: Plaid reports the dollar amount of each dividend, not the rate, so the app works out each payment's share count from your buys and sells and divides.
+- **History**: Plaid returns 24 months of transactions. Each sync keeps what earlier syncs saw, so history keeps growing past that.
+- **Upcoming payouts**: estimates that continue each holding's schedule at the current rate and share count. (Plaid doesn't report announced dividends.)
+- **Day change**: yesterday's synced price is kept as the previous close.
 - **Dividend growth**: the latest per-share payment compared with the one about a year earlier.
+
+## Without an account
+
+When nobody is signed in, the app shows sample data. On a copy without Firebase configured it saves to the browser instead, and accepts:
+
+- **Import CSV**: Robinhood's account activity report (Account → Reports and statements; rows coded `CDIV` become dividends), or a holdings list with `Symbol`, `Shares`, `Average Cost` and `Price` columns.
+- Holdings and dividends added by hand.
 
 ## Develop
 
 ```bash
-npm run server   # API on :8787
-npm run dev      # Vite on :5173, proxies /api to the server
-npm test         # web logic (Vitest) + server (unittest, against fake Plaid and Robinhood APIs)
+npm install && npm --prefix functions install
+npm run dev              # web app on :5173
+npm test                 # web app logic
+npm run test:functions   # Plaid logic, plus Firestore rules and sync on the emulator (needs Java 21)
+```
+
+To run the whole app against local emulators:
+
+```bash
+cd functions && npx firebase emulators:start --only auth,firestore,functions --project demo-dividends
+VITE_FIREBASE_EMULATORS=true npm run dev     # in another terminal
 ```

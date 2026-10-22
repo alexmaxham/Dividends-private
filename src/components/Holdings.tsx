@@ -20,7 +20,7 @@ export function Holdings({ s, openHolding }: { s: Store; openHolding: (sym: stri
   const [sort, setSort] = useState<{ key: Key; dir: 1 | -1 }>({ key: 'value', dir: -1 });
   const [onlyPaying, setOnlyPaying] = useState(false);
   const [editing, setEditing] = useState<Holding | 'new' | null>(null);
-  const editable = !isSynced(s.portfolio);
+  const editable = !isSynced(s.portfolio) && s.mode !== 'signedOut' && !s.linked;
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();

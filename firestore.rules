@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// Each person can read only their own data. Plaid access tokens (plaidItems) are never readable or writable from
+// the app; only Cloud Functions touch them. Synced portfolios are written by Cloud Functions; a person can write
+// their own portfolio only while they have no linked brokerage (manual entry and CSV import).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn(uid);
+      // The app may create the profile and change settings; accounts and sync status belong to Cloud Functions.
+      allow create: if signedIn(uid) && request.resource.data.keys().hasOnly(['settings']) && validSettings(request.resource.data.settings);
+      allow update: if signedIn(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['settings'])
+        && validSettings(request.resource.data.settings);
+
+      match /portfolio/current {
+        allow read: if signedIn(uid);
+        allow write: if signedIn(uid) && noLinkedAccounts(uid)
+          && (request.resource == null || (request.resource.data.source == 'manual' && request.resource.size() < 900000));
+      }
+    }
+
+    function validSettings(s) {
+      return s is map && s.keys().hasOnly(['monthlyGoal', 'taxRate'])
+        && (!('monthlyGoal' in s) || (s.monthlyGoal is number && s.monthlyGoal >= 0 && s.monthlyGoal < 10000000))
+        && (!('taxRate' in s) || (s.taxRate is number && s.taxRate >= 0 && s.taxRate <= 100));
+    }
+
+    function noLinkedAccounts(uid) {
+      let path = /databases/$(database)/documents/users/$(uid);
+      return !exists(path) || !get(path).data.keys().hasAny(['accounts']) || get(path).data.accounts.size() == 0;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
