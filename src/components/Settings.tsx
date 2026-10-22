@@ -103,8 +103,11 @@ export function Settings({ s }: { s: Store }) {
           <label className="field">Monthly income goal
             <span className="input-affix"><i>$</i><input id="goal" type="number" min={0} step={50} value={settings.monthlyGoal} onChange={(e) => updateSettings({ monthlyGoal: Number(e.target.value) })} /></span>
           </label>
-          <label className="field">Dividend tax rate (for the planner)
-            <span className="input-affix"><input id="tax" type="number" min={0} max={60} value={settings.taxRate} onChange={(e) => updateSettings({ taxRate: Number(e.target.value) })} /><i>%</i></span>
+          <label className="field">Qualified dividend tax rate
+            <span className="input-affix"><input id="tax" type="number" min={0} max={40} value={settings.taxRate} onChange={(e) => updateSettings({ taxRate: Number(e.target.value) })} /><i>%</i></span>
+          </label>
+          <label className="field">Ordinary income tax rate
+            <span className="input-affix"><input id="tax-ordinary" type="number" min={0} max={60} value={settings.ordinaryTaxRate} onChange={(e) => updateSettings({ ordinaryTaxRate: Number(e.target.value) })} /><i>%</i></span>
           </label>
         </div>
       </Card>

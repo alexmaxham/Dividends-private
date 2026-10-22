@@ -557,3 +557,15 @@ body.menu-open { overflow: hidden; }
 .page-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .page-head .page-title { margin-right: auto; }
 .account-pick { max-width: 100%; }
+
+/* ───────────── Taxes ───────────── */
+.rate-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 13px; color: var(--ink-2); }
+.rate-chip input { width: 3.2em; background: transparent; border: 0; border-bottom: 1px solid var(--grid); text-align: right; font-weight: 600; color: var(--ink-1); outline: none; padding: 0 2px; }
+.forms-1099 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.form-1099 { border: 1px solid var(--grid); border-radius: 14px; padding: 14px 16px; }
+.form-1099-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.form-1099 dl { margin: 0; display: grid; gap: 6px; }
+.form-1099 dl div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px dashed var(--grid); }
+.form-1099 dt { color: var(--ink-2); font-size: 13.5px; }
+.form-1099 dd { margin: 0; font-weight: 600; }
+.box { display: inline-block; min-width: 24px; padding: 1px 5px; margin-right: 6px; border-radius: 6px; background: var(--fill-chip); font-size: 11px; font-weight: 700; text-align: center; color: var(--ink-1); }

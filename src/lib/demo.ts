@@ -29,7 +29,7 @@ const SEEDS: Seed[] = [
   { h: { symbol: 'MSFT', name: 'Microsoft', sector: 'Technology', shares: 12, avgCost: 335.0, price: 512.4 }, rate: 0.91, months: [3, 6, 9, 12], day: 12, growth: 10, raiseMonth: 12 },
   { h: { symbol: 'AAPL', name: 'Apple', sector: 'Technology', shares: 30, avgCost: 168.2, price: 247.6 }, rate: 0.27, months: [2, 5, 8, 11], day: 14, growth: 4, raiseMonth: 5 },
   { h: { symbol: 'VZ', name: 'Verizon', sector: 'Communication', shares: 75, avgCost: 38.4, price: 41.9 }, rate: 0.69, months: [2, 5, 8, 11], day: 1, growth: 2, raiseMonth: 11 },
-  { h: { symbol: 'MAIN', name: 'Main Street Capital', sector: 'Financials', shares: 45, avgCost: 44.7, price: 61.3 }, rate: 0.255, months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], day: 15, growth: 4, raiseMonth: 1, roth: true, ordinary: true },
+  { h: { symbol: 'MAIN', name: 'Main Street Capital', sector: 'Financials', shares: 45, avgCost: 44.7, price: 61.3 }, rate: 0.255, months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], day: 15, growth: 4, raiseMonth: 1, ordinary: true },
   { h: { symbol: 'XOM', name: 'Exxon Mobil', sector: 'Energy', shares: 25, avgCost: 104.0, price: 114.2 }, rate: 1.03, months: [3, 6, 9, 12], day: 10, growth: 4, raiseMonth: 12 },
   { h: { symbol: 'PG', name: 'Procter & Gamble', sector: 'Consumer Staples', shares: 16, avgCost: 151.0, price: 158.7 }, rate: 1.06, months: [2, 5, 8, 11], day: 15, growth: 5, raiseMonth: 5 },
   { h: { symbol: 'NVDA', name: 'NVIDIA', sector: 'Technology', shares: 20, avgCost: 92.0, price: 181.0 }, rate: 0.01, months: [3, 6, 10, 12], day: 27, growth: 0, raiseMonth: 1 },

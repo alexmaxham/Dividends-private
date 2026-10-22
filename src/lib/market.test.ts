@@ -97,7 +97,7 @@ describe('accounts', () => {
   it('gives the sample portfolio two accounts and matching market data', () => {
     const demo = demoPortfolio(TODAY);
     expect(demo.accounts!.map((a) => a.subtype)).toEqual(['brokerage', 'roth']);
-    expect(forAccount(demo, 'demo-roth').holdings.map((h) => h.symbol).sort()).toEqual(['ABBV', 'JEPI', 'MAIN', 'O']);
+    expect(forAccount(demo, 'demo-roth').holdings.map((h) => h.symbol).sort()).toEqual(['ABBV', 'JEPI', 'O']);
     const market = demoMarket(TODAY);
     const { holdings } = computeStats(demo, TODAY, market);
     const ko = holdings.find((h) => h.symbol === 'KO')!;

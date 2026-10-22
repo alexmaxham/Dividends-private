@@ -128,8 +128,8 @@ export function Overview({ s, openHolding, goTo }: { s: Store; openHolding: (sym
                     <Ticker symbol={e.symbol} size={30} />
                     <div className="row-main">
                       <b>{e.symbol} <span className="muted">ex {dateShort(e.exDate)}</span></b>
-                      <small>{e.exDate === today ? 'Today: shares bought now miss this one' : <>Own it by the close on {dateShort(e.buyBy)} to get {money(e.amount)}/share</>}
-                        {e.payDate && <> · paid {dateShort(e.payDate)}</>}</small>
+                      <small title={e.payDate ? `Own shares by the close on ${dateShort(e.buyBy)} to get ${money(e.amount)}/share, paid ${dateShort(e.payDate)}` : undefined}>
+                        {e.exDate === today ? 'Too late to buy in' : <>Buy by {dateShort(e.buyBy)}</>} · {money(e.amount)}/sh</small>
                     </div>
                     <Money v={e.income} className="row-amt" />
                   </li>

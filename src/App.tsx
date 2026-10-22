@@ -6,6 +6,7 @@ import { Holdings } from './components/Holdings';
 import { Insights } from './components/Insights';
 import { Overview } from './components/Overview';
 import { Planner } from './components/Planner';
+import { Taxes } from './components/Taxes';
 import { AuthScreen } from './components/AuthScreen';
 import { linkWithPlaid, resumeOAuthLink, Settings } from './components/Settings';
 import { clearOAuthReturn, pendingOAuthReturn } from './lib/plaidLink';
@@ -21,6 +22,7 @@ const TABS = [
   { id: 'calendar', label: 'Calendar', icon: 'calendar' },
   { id: 'insights', label: 'Insights', icon: 'pie' },
   { id: 'planner', label: 'Planner', icon: 'trend' },
+  { id: 'taxes', label: 'Taxes', icon: 'receipt' },
   { id: 'settings', label: 'Settings', icon: 'gear' },
 ] as const;
 type Tab = (typeof TABS)[number]['id'];
@@ -171,6 +173,7 @@ export function App() {
           {tab === 'calendar' && <Calendar s={s} openHolding={open} />}
           {tab === 'insights' && <Insights s={s} openHolding={open} />}
           {tab === 'planner' && <Planner s={s} />}
+          {tab === 'taxes' && <Taxes s={s} openHolding={open} />}
           {tab === 'settings' && <Settings s={s} />}
         </main>
       </div>

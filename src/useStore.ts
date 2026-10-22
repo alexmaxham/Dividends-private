@@ -186,11 +186,15 @@ export function useStore() {
     return { holdings, totals, payouts };
   }, [view, today, market]);
   // Every account together, for views that break things down by account (taxes, income per account).
-  const all = useMemo(() => (account === 'all' ? derived : { ...computeStats(priced, today, market) }), [account, derived, priced, today, market]);
+  const all = useMemo(() => {
+    if (account === 'all') return derived;
+    const { holdings, totals } = computeStats(priced, today, market);
+    return { holdings, totals, payouts: projectPayouts(holdings, priced.dividends, today, 12, market) };
+  }, [account, derived, priced, today, market]);
 
   return {
     settings, updateSettings, mode, cloud, user, profile, linked, call, exploring, setExploring,
-    portfolio: view, allPortfolio: priced, allHoldings: all.holdings, accounts, account, market, watchlist, quotesEnabled,
+    portfolio: view, allPortfolio: priced, allHoldings: all.holdings, allPayouts: all.payouts, accounts, account, market, watchlist, quotesEnabled,
     portfolioLoaded, replacePortfolio, syncNow, busy, setBusy, error, setError, today, ...derived,
   };
 }
