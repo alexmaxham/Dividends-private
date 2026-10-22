@@ -158,6 +158,23 @@ export function forAccount(p: Portfolio, account: string): Portfolio {
   };
 }
 
+export interface AccountTotals { id: string; value: number; cost: number; income: number }
+
+/** Value, cost and forward income in each brokerage account. */
+export function accountBreakdown(holdings: HoldingStats[], accounts: { id: string }[]): AccountTotals[] {
+  const by = new Map(accounts.map((a) => [a.id, { id: a.id, value: 0, cost: 0, income: 0 }]));
+  for (const h of holdings) {
+    for (const l of h.lots ?? []) {
+      const t = by.get(l.account);
+      if (!t) continue;
+      t.value += l.shares * h.price;
+      t.cost += l.cost;
+      t.income += l.shares * h.annualPerShare;
+    }
+  }
+  return [...by.values()];
+}
+
 /** The trading day you need to buy by to get a dividend: the weekday before the ex-dividend date. */
 export function buyBy(exDate: string): string {
   let d = addDays(exDate, -1);

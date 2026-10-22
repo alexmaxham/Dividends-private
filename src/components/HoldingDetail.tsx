@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { buyBy, isReceived } from '../lib/analytics';
+import { accountLabel } from '../lib/accounts';
 import { dateLong, dateShort, FREQ_LABEL, money, pct, shares as fmtShares, signedPct } from '../lib/format';
 import type { Store } from '../useStore';
 import { Bars } from './Charts';
@@ -38,6 +39,23 @@ export function HoldingDetail({ s, symbol, onClose }: { s: Store; symbol: string
           <div><span>Collected so far</span><b><Money v={h.received} /></b></div>
           <div><span>Share of income</span><b className="num">{pct(h.incomeShare * 100, 1)}</b></div>
         </div>
+      )}
+
+      {h && s.account === 'all' && (h.lots?.length ?? 0) > 1 && (
+        <section className="detail-section">
+          <h3>By account</h3>
+          <ul className="rows compact">
+            {h.lots!.map((l) => {
+              const a = s.accounts.find((x) => x.id === l.account);
+              return (
+                <li key={l.account}>
+                  <div className="row-main"><b>{a ? accountLabel(a) : 'Account'}</b><small>{fmtShares(l.shares)} sh · <Money v={l.shares * h.annualPerShare} />/yr</small></div>
+                  <Money v={l.shares * h.price} className="row-amt" />
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
 
       {rates.length > 1 && (

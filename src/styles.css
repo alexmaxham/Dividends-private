@@ -552,3 +552,8 @@ body.menu-open { overflow: hidden; }
 
 /* ───────────── Market data ───────────── */
 .cal-ex { font-weight: 500; color: var(--ink-3); font-size: 11.5px; margin-left: 4px; }
+
+/* ───────────── Accounts ───────────── */
+.page-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.page-head .page-title { margin-right: auto; }
+.account-pick { max-width: 100%; }

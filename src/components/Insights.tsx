@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { groupBy, incomeByYear } from '../lib/analytics';
+import { accountBreakdown, groupBy, incomeByYear } from '../lib/analytics';
+import { accountLabel, ACCOUNTS, accountType } from '../lib/accounts';
 import { money0, pct, signedPct } from '../lib/format';
 import type { Store } from '../useStore';
 import { BarList, Bars } from './Charts';
@@ -39,6 +40,8 @@ export function Insights({ s, openHolding }: { s: Store; openHolding: (sym: stri
   if (avgGrowth !== null && avgGrowth > 0) flags.push({ tone: 'ok', text: `Your payers raised dividends ${signedPct(avgGrowth, 1)} over the past year, weighted by income.` });
 
   const fmt = (n: number) => <span><Money v={n} whole={basis === 'value'} /></span>;
+  const byAccount = useMemo(() => accountBreakdown(s.allHoldings, s.accounts), [s.allHoldings, s.accounts]);
+  const accountWhole = byAccount.reduce((a, r) => a + (basis === 'income' ? r.income : r.value), 0);
 
   return (
     <div className="page">
@@ -62,6 +65,20 @@ export function Insights({ s, openHolding }: { s: Store; openHolding: (sym: stri
             </div>
           </div>
         </Card>
+
+        {s.accounts.length > 1 && (
+          <Card title="By account" className="span-2" action={<span className="muted small">{basis === 'income' ? 'Forward income' : 'Value'}, all accounts</span>}>
+            <BarList format={fmt} rows={byAccount.map((r) => {
+              const a = s.accounts.find((x) => x.id === r.id)!;
+              const v = basis === 'income' ? r.income : r.value;
+              return {
+                key: r.id, value: v,
+                label: <button className="link-btn plain" onClick={() => s.updateSettings({ account: r.id })}>{accountLabel(a)}</button>,
+                sub: `${ACCOUNTS[accountType(a.subtype)].label}${accountWhole ? ` · ${pct((v / accountWhole) * 100, 0)}` : ''}${r.value ? ` · ${pct((r.income / r.value) * 100)} yield` : ''}`,
+              };
+            })} />
+          </Card>
+        )}
 
         <Card title="Checkup">
           <ul className="flags">
