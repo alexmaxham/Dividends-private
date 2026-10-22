@@ -250,6 +250,8 @@ export interface ProjectionInput {
   years: number;
   reinvest: boolean;
   taxRatePct: number;
+  /** Most that can go in per year (an IRA's limit, say); contributions stop for the year once it's reached. */
+  annualLimit?: number | null;
 }
 
 export interface ProjectionRow {
@@ -258,6 +260,12 @@ export interface ProjectionRow {
   annualIncome: number;
   contributed: number;
   dividendsCollected: number;
+}
+
+/** What actually goes in each year once a contribution limit applies. */
+export function yearlyContribution(monthly: number, annualLimit?: number | null): number {
+  const wanted = Math.max(0, monthly) * 12;
+  return annualLimit != null ? Math.min(wanted, Math.max(0, annualLimit)) : wanted;
 }
 
 /**
@@ -273,6 +281,7 @@ export function project(inp: ProjectionInput): ProjectionRow[] {
   let divPerShare = inp.yieldPct / 100; // annual, per $1 of starting price
   let contributed = inp.startValue;
   let collected = 0;
+  let thisYear = 0; // contributed so far in the current year, for the limit
   const rows: ProjectionRow[] = [{ year: 0, value: inp.startValue, annualIncome: shares * divPerShare, contributed, dividendsCollected: 0 }];
   for (let m = 1; m <= inp.years * 12; m++) {
     price *= mPrice;
@@ -280,9 +289,13 @@ export function project(inp: ProjectionInput): ProjectionRow[] {
     const div = (shares * divPerShare) / 12 * (1 - inp.taxRatePct / 100);
     collected += div;
     if (inp.reinvest) shares += div / price;
-    shares += inp.monthlyContribution / price;
-    contributed += inp.monthlyContribution;
+    const room = inp.annualLimit != null ? Math.max(0, inp.annualLimit - thisYear) : Infinity;
+    const put = Math.min(Math.max(0, inp.monthlyContribution), room);
+    shares += put / price;
+    contributed += put;
+    thisYear += put;
     if (m % 12 === 0) {
+      thisYear = 0;
       rows.push({ year: m / 12, value: shares * price, annualIncome: shares * divPerShare, contributed, dividendsCollected: collected });
     }
   }

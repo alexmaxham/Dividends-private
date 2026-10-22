@@ -534,3 +534,18 @@ body.menu-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .menu-sheet, .menu-sheet.open, .menu-list li, .burger i { transition: none; }
 }
+
+/* Planner account type */
+.input-select {
+  appearance: none; padding: 10px 36px 10px 13px; border-radius: 13px; border: 1px solid var(--edge); background-color: var(--track); color: var(--ink-1);
+  font-size: 15px; font-weight: 600; outline: none; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23889' fill='none' stroke-width='1.6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center;
+}
+.input-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.input-select option { color: #111; }
+.field-note { font-weight: 500; font-size: 12.5px; line-height: 1.4; }
+.field.narrow { flex: 0 0 96px; }
+.small-link { font-size: 12.5px; }
+.limit-note { margin: -4px 0 0; padding: 9px 12px; border-radius: 12px; font-size: 13px; color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.tax-note { margin: 0; }

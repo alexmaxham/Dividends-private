@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addMonths, computeStats, detectFrequency, monthlySeries, project, projectPayouts } from './analytics';
+import { addMonths, computeStats, detectFrequency, monthlySeries, project, projectPayouts, yearlyContribution } from './analytics';
+import { contributionLimit } from './accounts';
 import { importCsv, parseCsv, toCsv } from './csv';
 import { demoPortfolio } from './demo';
 import type { Dividend, Holding, Portfolio } from './types';
@@ -88,6 +89,30 @@ describe('project', () => {
     expect(flat[10].dividendsCollected).toBeCloseTo(4000);
     expect(drip[10].value).toBeGreaterThan(14800);
     expect(drip[10].annualIncome).toBeGreaterThan(590);
+  });
+});
+
+describe('contribution limits', () => {
+  it('caps contributions at the yearly limit', () => {
+    const base = { startValue: 0, yieldPct: 0, monthlyContribution: 1000, dividendGrowthPct: 0, priceGrowthPct: 0, years: 3, reinvest: false, taxRatePct: 0 };
+    expect(project(base)[3].contributed).toBe(36000);
+    const ira = project({ ...base, annualLimit: 7500 });
+    expect(ira[1].contributed).toBe(7500);
+    expect(ira[3].contributed).toBe(22500); // the limit resets each year
+    expect(project({ ...base, monthlyContribution: 500, annualLimit: 7500 })[1].contributed).toBe(6000); // under the limit
+    expect(yearlyContribution(1000, 7500)).toBe(7500);
+    expect(yearlyContribution(500, null)).toBe(6000);
+  });
+  it('uses 2026 IRS limits with catch-up by age', () => {
+    expect(contributionLimit('taxable', 40)).toBeNull();
+    expect(contributionLimit('roth-ira', 40)).toBe(7500);
+    expect(contributionLimit('traditional-ira', 50)).toBe(8600);
+    expect(contributionLimit('401k', 45)).toBe(24500);
+    expect(contributionLimit('401k', 55)).toBe(32500);
+    expect(contributionLimit('roth-401k', 61)).toBe(35750);
+    expect(contributionLimit('401k', 64)).toBe(32500);
+    expect(contributionLimit('hsa', 40)).toBe(4400);
+    expect(contributionLimit('hsa', 56, true)).toBe(9750);
   });
 });
 
