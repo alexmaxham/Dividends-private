@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { cloudConfig } from './cloud/config';
-import { cloudMessage, loadCloud, type AccountSettings, type Cloud, type CloudUser, type Profile } from './cloud/firebase';
+import { cloudMessage, loadCloud, type AccountSettings, type Cloud, type CloudUser, type Profile, type SecondStep } from './cloud/firebase';
 import { computeStats, forAccount, projectPayouts, todayIso, withMarketPrices } from './lib/analytics';
 import { DEMO_WATCHLIST, demoMarket, demoPortfolio } from './lib/demo';
 import type { Market, Portfolio, Settings } from './lib/types';
@@ -64,6 +64,8 @@ export function useStore() {
   const [busy, setBusy] = useState(false);
   const [liveMarket, setLiveMarket] = useState<Market>({});
   const [quotesEnabled, setQuotesEnabled] = useState(false);
+  /** A sign-in waiting for the authenticator code. */
+  const [secondStep, setSecondStep] = useState<SecondStep | null>(null);
 
   // Connect to Firebase and follow the signed-in person.
   useEffect(() => {
@@ -73,10 +75,11 @@ export function useStore() {
     loadCloud(cloudConfig).then((c) => {
       if (cancelled) return;
       setCloud(c);
+      c.redirectResult().then((step) => step && setSecondStep(step)).catch((e) => setError(cloudMessage(e)));
       stop = c.onAuth((u) => {
         setUser(u);
         setMode(u ? 'cloud' : 'signedOut');
-        if (u) setExploring(false);
+        if (u) { setExploring(false); setSecondStep(null); }
       });
     }).catch((e) => { setError(cloudMessage(e)); setMode('local'); });
     return () => { cancelled = true; stop(); };
@@ -193,7 +196,7 @@ export function useStore() {
   }, [account, derived, priced, today, market]);
 
   return {
-    settings, updateSettings, mode, cloud, user, profile, linked, call, exploring, setExploring,
+    settings, updateSettings, mode, cloud, user, profile, linked, call, exploring, setExploring, secondStep, setSecondStep,
     portfolio: view, allPortfolio: priced, allHoldings: all.holdings, allPayouts: all.payouts, accounts, account, market, watchlist, quotesEnabled,
     portfolioLoaded, replacePortfolio, syncNow, busy, setBusy, error, setError, today, ...derived,
   };
