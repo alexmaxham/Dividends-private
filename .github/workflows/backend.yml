@@ -104,9 +104,10 @@ jobs:
           VAPID_PUBLIC_KEY: ${{ vars.VAPID_PUBLIC_KEY }}
           EMAIL_FROM: ${{ vars.EMAIL_FROM }}
         run: |
-          [ -n "$VAPID_PUBLIC_KEY" ] && echo "VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY" >> functions/.env
-          [ -n "$EMAIL_FROM" ] && echo "EMAIL_FROM=\"$EMAIL_FROM\"" >> functions/.env
-          true
+          # Replace the line in functions/.env (each setting must appear there exactly once).
+          setenv() { v=$(printf '%s' "$2" | sed 's/[&|\\]/\\&/g'); sed -i "s|^$1=.*|$1=$v|" functions/.env; }
+          if [ -n "$VAPID_PUBLIC_KEY" ]; then setenv VAPID_PUBLIC_KEY "$VAPID_PUBLIC_KEY"; fi
+          if [ -n "$EMAIL_FROM" ]; then setenv EMAIL_FROM "\"$EMAIL_FROM\""; fi
       - name: Deploy rules and functions
         if: steps.ready.outputs.go == 'true'
         run: npx --prefix functions firebase deploy --only firestore,functions --project "$PROJECT" --non-interactive --force
