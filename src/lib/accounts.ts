@@ -38,3 +38,28 @@ export function contributionLimit(type: AccountType, age: number, hsaFamily = fa
       return (hsaFamily ? 8750 : 4400) + (age >= 55 ? 1000 : 0);
   }
 }
+
+// ───────────── Linked brokerage accounts ─────────────
+
+/** The planner's account type for one of Plaid's investment account subtypes. */
+export function accountType(subtype: string): AccountType {
+  const s = subtype.toLowerCase();
+  if (s === 'roth') return 'roth-ira';
+  if (s === 'roth 401k') return 'roth-401k';
+  if (['ira', 'sep ira', 'simple ira', 'sarsep', 'keogh', 'rollover ira'].includes(s)) return 'traditional-ira';
+  if (['401k', '401a', '403b', '457b', 'profit sharing plan', 'pension', 'retirement', 'thrift savings plan'].includes(s)) return '401k';
+  if (s === 'hsa') return 'hsa';
+  return 'taxable';
+}
+
+/** How dividends in this account are taxed: each year (a regular brokerage account) or not until withdrawal / never. */
+export function taxTreatment(subtype: string | undefined): Tax {
+  if (!subtype) return 'yearly';
+  const s = subtype.toLowerCase();
+  if (['529', 'education savings account', 'non-taxable brokerage account'].includes(s)) return 'free';
+  return ACCOUNTS[accountType(s)].tax;
+}
+
+export function accountLabel(a: { name: string; mask: string | null }): string {
+  return a.mask ? `${a.name} ••${a.mask}` : a.name;
+}

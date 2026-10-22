@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react';
-import { cloudMessage, type LinkedAccount } from '../cloud/firebase';
+import { useEffect, useRef, useState } from 'react';
+import { cloudMessage, type LinkedAccount, type TotpSetup } from '../cloud/firebase';
 import { download, importCsv } from '../lib/csv';
 import { demoPortfolio } from '../lib/demo';
 import { dateLong, relativeTime } from '../lib/format';
 import { openPlaidLink, resumePlaidLink, type LinkResult, type PendingLink } from '../lib/plaidLink';
+import { disablePush, enablePush, isIos, isStandalone, pushActive, pushSupported } from '../lib/push';
+import type { NotifySettings } from '../lib/types';
 import { isSynced, type Portfolio } from '../lib/types';
 import { EMPTY_PORTFOLIO, type Store } from '../useStore';
 import { Card, Icon, Segmented } from './ui';
@@ -98,13 +100,18 @@ export function Settings({ s }: { s: Store }) {
         )}
       </Card>
 
-      <Card title={<><Icon name="target" /> Goals</>}>
+      {mode === 'cloud' && <NotificationsCard s={s} />}
+
+      <Card title={<><Icon name="target" /> Goals and taxes</>}>
         <div className="form-row">
           <label className="field">Monthly income goal
             <span className="input-affix"><i>$</i><input id="goal" type="number" min={0} step={50} value={settings.monthlyGoal} onChange={(e) => updateSettings({ monthlyGoal: Number(e.target.value) })} /></span>
           </label>
-          <label className="field">Dividend tax rate (for the planner)
-            <span className="input-affix"><input id="tax" type="number" min={0} max={60} value={settings.taxRate} onChange={(e) => updateSettings({ taxRate: Number(e.target.value) })} /><i>%</i></span>
+          <label className="field">Qualified dividend tax rate
+            <span className="input-affix"><input id="tax" type="number" min={0} max={40} value={settings.taxRate} onChange={(e) => updateSettings({ taxRate: Number(e.target.value) })} /><i>%</i></span>
+          </label>
+          <label className="field">Ordinary income tax rate
+            <span className="input-affix"><input id="tax-ordinary" type="number" min={0} max={60} value={settings.ordinaryTaxRate} onChange={(e) => updateSettings({ ordinaryTaxRate: Number(e.target.value) })} /><i>%</i></span>
           </label>
         </div>
       </Card>
@@ -138,7 +145,7 @@ export function Settings({ s }: { s: Store }) {
           </p>
           <div className="btn-row">
             {canEdit && <button className="btn" onClick={() => csvRef.current?.click()}><Icon name="upload" /> Import CSV</button>}
-            <button className="btn" onClick={() => download(`dividends-backup-${s.today}.json`, JSON.stringify({ portfolio: s.portfolio, settings }, null, 1), 'application/json')}>
+            <button className="btn" onClick={() => download(`dividends-backup-${s.today}.json`, JSON.stringify({ portfolio: s.allPortfolio, settings }, null, 1), 'application/json')}>
               <Icon name="download" /> Back up
             </button>
             {canEdit && <button className="btn" onClick={() => backupRef.current?.click()}>Restore backup</button>}
@@ -246,7 +253,7 @@ function AccountCard({ s }: { s: Store }) {
             <small className="muted">{s.user?.emailVerified ? 'Email verified' : 'Check your inbox to verify your email'}</small>
           </div>
           <span className="spacer" />
-          <button className="btn" onClick={() => setView(view === 'password' ? 'idle' : 'password')}>Change password</button>
+          {s.user?.providers.includes('password') && <button className="btn" onClick={() => setView(view === 'password' ? 'idle' : 'password')}>Change password</button>}
           <button className="btn" onClick={() => s.cloud?.signOut()}>Sign out</button>
         </div>
         {view === 'password' && (
@@ -258,6 +265,7 @@ function AccountCard({ s }: { s: Store }) {
             <div className="form-actions"><span className="spacer" /><button type="button" className="btn" onClick={() => setView('idle')}>Cancel</button><button className="btn primary" disabled={working}>Save password</button></div>
           </form>
         )}
+        <SignInOptions s={s} />
         {view === 'delete' ? (
           <form className="form danger-zone" onSubmit={(e) => { e.preventDefault(); void run(() => s.call('deleteAccount').then(() => s.cloud?.signOut()), 'Account deleted.'); }}>
             <p><b>Delete your account?</b> This unlinks every brokerage at Plaid and permanently erases your portfolio, history and settings. It can't be undone.</p>
@@ -272,5 +280,132 @@ function AccountCard({ s }: { s: Store }) {
         <p className="muted small"><a href="./privacy.html" className="link-btn">Privacy policy</a></p>
       </div>
     </Card>
+  );
+}
+
+const TOPICS: { key: keyof NotifySettings; label: string; note: string }[] = [
+  { key: 'payments', label: 'Payments', note: '"KO paid you $21.20"' },
+  { key: 'raises', label: 'Dividend changes', note: '"PEP raised its dividend 5%", and cuts' },
+  { key: 'reconnect', label: 'Reconnect reminders', note: 'When a brokerage sign-in expires' },
+  { key: 'weekly', label: 'Weekly summary', note: 'Sunday evening: the week and what’s next' },
+];
+
+function NotificationsCard({ s }: { s: Store }) {
+  const n = s.settings.notify;
+  const set = (patch: Partial<NotifySettings>) => s.updateSettings({ notify: { ...n, ...patch } });
+  const [here, setHere] = useState(false); // push is on for this device
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
+  useEffect(() => { void pushActive().then(setHere); }, []);
+
+  const run = async (fn: () => Promise<unknown>, done?: string) => {
+    setWorking(true); setErr(null); setMsg(null);
+    try { await fn(); if (done) setMsg(done); } catch (e) { setErr(cloudMessage(e)); } finally { setWorking(false); }
+  };
+  const togglePush = (on: boolean) => run(async () => {
+    if (on) { await enablePush(s.call); set({ push: true }); setHere(true); }
+    else { await disablePush(s.call); setHere(false); }
+  });
+
+  return (
+    <Card title={<><Icon name="bell" /> Notifications</>}>
+      <div className="form">
+        <label className="switch-row">
+          <span>Email <small className="muted">{s.user?.emailVerified ? s.user.email : 'verify your email address first'}</small></span>
+          <input type="checkbox" className="switch" checked={n.email} onChange={(e) => set({ email: e.target.checked })} />
+        </label>
+        <label className="switch-row">
+          <span>Push on this device <small className="muted">{pushSupported() ? 'alerts on this phone or computer' : isIos() && !isStandalone() ? 'add to your Home Screen first' : 'not supported in this browser'}</small></span>
+          <input type="checkbox" className="switch" checked={here} disabled={working} onChange={(e) => void togglePush(e.target.checked)} />
+        </label>
+        {isIos() && !isStandalone() && (
+          <p className="muted small">On iPhone, notifications work once Dividends is on your Home Screen: tap Share, then Add to Home Screen, and open it from there.</p>
+        )}
+        <div className="topic-list">
+          {TOPICS.map((t) => (
+            <label key={t.key} className="switch-row">
+              <span>{t.label} <small className="muted">{t.note}</small></span>
+              <input type="checkbox" className="switch" checked={n[t.key]} onChange={(e) => set({ [t.key]: e.target.checked })} />
+            </label>
+          ))}
+        </div>
+        <div><button className="btn" disabled={working} onClick={() => void run(() => s.call('testNotification'), 'Sent. It can take a minute to arrive.')}>Send a test</button></div>
+        {msg && <p className="note">{msg}</p>}
+        {err && <p className="error"><Icon name="alert" size={16} /> {err}</p>}
+      </div>
+    </Card>
+  );
+}
+
+/** Google sign-in and two-step verification with an authenticator app. */
+function SignInOptions({ s }: { s: Store }) {
+  const cloud = s.cloud!;
+  const [enrolled, setEnrolled] = useState(() => cloud.totpEnrolled());
+  const [setup, setSetup] = useState<(TotpSetup & { qr: string }) | null>(null);
+  const [code, setCode] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
+  const hasGoogle = s.user?.providers.includes('google.com');
+
+  const run = async (fn: () => Promise<void>, done?: string) => {
+    setWorking(true); setErr(null); setMsg(null);
+    try { await fn(); if (done) setMsg(done); } catch (e) { setErr(cloudMessage(e)); } finally { setWorking(false); }
+  };
+  const start = () => run(async () => {
+    const t = await cloud.startTotp();
+    const QR = await import('qrcode');
+    setSetup({ ...t, qr: await QR.toDataURL(t.url, { margin: 1, width: 336 }) });
+  });
+  const finish = (e: React.FormEvent) => {
+    e.preventDefault();
+    void run(async () => {
+      await setup!.finish(code);
+      setSetup(null); setCode(''); setEnrolled(true);
+    }, 'Two-step verification is on. You’ll enter a code from your app each time you sign in.');
+  };
+  const turnOff = () => {
+    if (!confirm('Turn off two-step verification? Signing in will only need your password or Google.')) return;
+    void run(async () => { await cloud.removeTotp(); setEnrolled(false); }, 'Two-step verification is off.');
+  };
+
+  return (
+    <div className="form signin-options">
+      <div className="conn">
+        <div>
+          <b>Google sign-in</b>
+          <small className="muted">{hasGoogle ? 'On: you can sign in with your Google account' : 'Sign in with your Google account as well as your password'}</small>
+        </div>
+        <span className="spacer" />
+        {!hasGoogle && <button className="btn" disabled={working} onClick={() => void run(() => cloud.linkGoogle(), 'Google sign-in added.')}>Add Google</button>}
+      </div>
+      <div className="conn">
+        <div>
+          <b>Two-step verification</b>
+          <small className="muted">{enrolled ? 'On: a code from your authenticator app is needed to sign in' : 'Ask for a code from an authenticator app when you sign in'}</small>
+        </div>
+        <span className="spacer" />
+        {enrolled
+          ? <button className="btn" disabled={working} onClick={turnOff}>Turn off</button>
+          : !setup && <button className="btn" disabled={working} onClick={() => void start()}><Icon name="shield" /> Set up</button>}
+      </div>
+      {setup && (
+        <form className="form" onSubmit={finish}>
+          <div className="totp-setup">
+            <img src={setup.qr} alt="QR code to scan with your authenticator app" />
+            <div className="form">
+              <p className="small">Scan this with Google Authenticator, 1Password, Authy or your phone's password manager. Or enter this key:</p>
+              <div className="totp-key">{setup.secretKey}</div>
+              <p className="small"><a href={setup.url} className="link-btn">Open in an authenticator app on this device</a></p>
+              <label>Code from the app<input id="totp-code" inputMode="numeric" autoComplete="one-time-code" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} required /></label>
+            </div>
+          </div>
+          <div className="form-actions"><span className="spacer" /><button type="button" className="btn" onClick={() => setSetup(null)}>Cancel</button><button className="btn primary" disabled={working}>Turn on</button></div>
+        </form>
+      )}
+      {msg && <p className="note">{msg}</p>}
+      {err && <p className="error"><Icon name="alert" size={16} /> {err}</p>}
+    </div>
   );
 }

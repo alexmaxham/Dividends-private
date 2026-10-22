@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { addMonths, monthKey } from '../lib/analytics';
-import { monthLong } from '../lib/format';
+import { dateShort, monthLong } from '../lib/format';
 import type { Payout } from '../lib/types';
 import type { Store } from '../useStore';
 import { Card, Money, Stat } from './ui';
@@ -42,9 +42,9 @@ export function Calendar({ s, openHolding }: { s: Store; openHolding: (sym: stri
             <ul className="cal-list">
               {m.items.map((p) => (
                 <li key={`${p.symbol}-${p.date}`} className={`clickable ${p.kind === 'estimated' ? 'est' : ''} ${p.paid ? 'paid' : ''}`} onClick={() => openHolding(p.symbol)}
-                  title={p.paid ? 'Paid' : p.kind === 'confirmed' ? 'Confirmed' : 'Estimated'}>
+                  title={p.paid ? 'Paid' : p.kind === 'confirmed' ? `Confirmed${p.exDate ? ` · ex-dividend ${dateShort(p.exDate)}` : ''}` : 'Estimated'}>
                   <span className="cal-day num">{Number(p.date.slice(8, 10))}</span>
-                  <b>{p.symbol}</b>
+                  <b>{p.symbol}{p.exDate && p.exDate >= s.today && !p.paid && <small className="cal-ex"> ex {dateShort(p.exDate)}</small>}</b>
                   <span className="cal-flag">{p.paid ? '✓' : p.kind === 'confirmed' ? '●' : '○'}</span>
                   <Money v={p.amount} className="row-amt" />
                 </li>
@@ -54,7 +54,7 @@ export function Calendar({ s, openHolding }: { s: Store; openHolding: (sym: stri
           </Card>
         ))}
       </div>
-      <p className="footnote">✓ paid · ● confirmed by your broker · ○ estimated from each holding's payment pattern and current share count</p>
+      <p className="footnote">✓ paid · ● confirmed: declared by the company{Object.keys(s.market).length ? ', with its ex-dividend date' : ' or your broker'} · ○ estimated from each holding's payment pattern and current share count</p>
     </div>
   );
 }

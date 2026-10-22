@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ACCOUNTS, contributionLimit, LIMITS_YEAR, type AccountType } from '../lib/accounts';
-import { project, yearlyContribution } from '../lib/analytics';
+import { accountBreakdown, project, yearlyContribution } from '../lib/analytics';
+import { accountLabel, ACCOUNTS, accountType, contributionLimit, LIMITS_YEAR, type AccountType } from '../lib/accounts';
 
 const dollars = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
 import type { Store } from '../useStore';
@@ -39,6 +39,20 @@ export function Planner({ s }: { s: Store }) {
     setInp({ ...inp, [k]: e.target.type === 'checkbox' ? e.target.checked : Number(e.target.value) });
 
   const thisYear = Number(s.today.slice(0, 4));
+  const linkedTotals = useMemo(() => accountBreakdown(s.allHoldings, s.accounts), [s.allHoldings, s.accounts]);
+  const [from, setFrom] = useState('portfolio');
+  /** Start from one linked account: its type, balance and yield. */
+  const startFrom = (id: string) => {
+    setFrom(id);
+    if (id === 'portfolio') {
+      setInp({ ...inp, startValue: Math.round(totals.value), yieldPct: +totals.currentYield.toFixed(2) });
+      return;
+    }
+    const a = s.accounts.find((x) => x.id === id)!;
+    const t = linkedTotals.find((x) => x.id === id)!;
+    setAccount({ ...account, type: accountType(a.subtype), limitOverride: null });
+    setInp({ ...inp, startValue: Math.round(t.value), yieldPct: t.value ? +((t.income / t.value) * 100).toFixed(2) : inp.yieldPct });
+  };
   const labels = rows.map((r) => String(thisYear + r.year));
   const yearFmt = (y: string) => y;
 
@@ -47,6 +61,15 @@ export function Planner({ s }: { s: Store }) {
       <div className="grid-planner">
         <Card title="Assumptions" className="planner-form">
           <div className="form">
+            {s.accounts.length > 0 && (
+              <label className="field">
+                <span>Start from</span>
+                <select id="start-from" className="input-select" value={from} onChange={(e) => startFrom(e.target.value)}>
+                  <option value="portfolio">My whole portfolio</option>
+                  {s.accounts.map((a) => <option key={a.id} value={a.id}>{accountLabel(a)}</option>)}
+                </select>
+              </label>
+            )}
             <label className="field">
               <span>Account type</span>
               <select id="account-type" className="input-select" value={account.type} onChange={(e) => changeAccount({ type: e.target.value as AccountType })}>
@@ -99,7 +122,7 @@ export function Planner({ s }: { s: Store }) {
               <span>Reinvest dividends (DRIP)</span>
               <input type="checkbox" className="switch" checked={inp.reinvest} onChange={set('reinvest')} />
             </label>
-            <button className="link-btn" onClick={() => setInp({ ...inp, startValue: Math.round(totals.value), yieldPct: +totals.currentYield.toFixed(2) })}>Reset to my portfolio</button>
+            <button className="link-btn" onClick={() => startFrom(from)}>Reset to {from === 'portfolio' ? 'my portfolio' : 'this account'}</button>
           </div>
         </Card>
 

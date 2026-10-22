@@ -1,14 +1,19 @@
 import { useMemo, useState } from 'react';
-import { groupBy, incomeByYear } from '../lib/analytics';
+import { accountBreakdown, addDays, groupBy, incomeByYear } from '../lib/analytics';
+import { compareWithBenchmark } from '../lib/benchmark';
+import { BENCHMARKS } from '../useStore';
+import { YearReview } from './YearReview';
+import { accountLabel, ACCOUNTS, accountType } from '../lib/accounts';
 import { money0, pct, signedPct } from '../lib/format';
 import type { Store } from '../useStore';
-import { BarList, Bars } from './Charts';
+import { BarList, Bars, Legend, LineChart } from './Charts';
 import { Card, Icon, Money, Segmented, Ticker } from './ui';
 
 type Basis = 'income' | 'value';
 
 export function Insights({ s, openHolding }: { s: Store; openHolding: (sym: string) => void }) {
   const [basis, setBasis] = useState<Basis>('income');
+  const [review, setReview] = useState(false);
   const { holdings, totals } = s;
   const pick = (h: (typeof holdings)[number]) => (basis === 'income' ? h.annualIncome : h.value);
   const whole = basis === 'income' ? totals.annualIncome : totals.value;
@@ -39,11 +44,13 @@ export function Insights({ s, openHolding }: { s: Store; openHolding: (sym: stri
   if (avgGrowth !== null && avgGrowth > 0) flags.push({ tone: 'ok', text: `Your payers raised dividends ${signedPct(avgGrowth, 1)} over the past year, weighted by income.` });
 
   const fmt = (n: number) => <span><Money v={n} whole={basis === 'value'} /></span>;
+  const byAccount = useMemo(() => accountBreakdown(s.allHoldings, s.accounts), [s.allHoldings, s.accounts]);
+  const accountWhole = byAccount.reduce((a, r) => a + (basis === 'income' ? r.income : r.value), 0);
 
   return (
     <div className="page">
       <div className="grid-2">
-        <Card title="Dividend income by year" className="span-2">
+        <Card title="Dividend income by year" className="span-2" action={<button className="link-btn" onClick={() => setReview(true)}>Year in review</button>}>
           {yearBars.length ? <Bars data={yearBars} label="Dividends received per year" height={220} /> : <p className="muted">No payments yet.</p>}
         </Card>
 
@@ -62,6 +69,23 @@ export function Insights({ s, openHolding }: { s: Store; openHolding: (sym: stri
             </div>
           </div>
         </Card>
+
+        {s.accounts.length > 1 && (
+          <Card title="By account" className="span-2" action={<span className="muted small">{basis === 'income' ? 'Forward income' : 'Value'}, all accounts</span>}>
+            <BarList format={fmt} rows={byAccount.map((r) => {
+              const a = s.accounts.find((x) => x.id === r.id)!;
+              const v = basis === 'income' ? r.income : r.value;
+              return {
+                key: r.id, value: v,
+                label: <button className="link-btn plain" onClick={() => s.updateSettings({ account: r.id })}>{accountLabel(a)}</button>,
+                sub: `${ACCOUNTS[accountType(a.subtype)].label}${accountWhole ? ` · ${pct((v / accountWhole) * 100, 0)}` : ''}${r.value ? ` · ${pct((r.income / r.value) * 100)} yield` : ''}`,
+              };
+            })} />
+          </Card>
+        )}
+
+        <BenchmarkCard s={s} />
+        {review && <YearReview s={s} onClose={() => setReview(false)} />}
 
         <Card title="Checkup">
           <ul className="flags">
@@ -90,5 +114,43 @@ export function Insights({ s, openHolding }: { s: Store; openHolding: (sym: stri
         </Card>
       </div>
     </div>
+  );
+}
+
+const RANGES = { '3M': 91, '6M': 182, '1Y': 365, '2Y': 730 } as const;
+type Range = keyof typeof RANGES;
+
+function BenchmarkCard({ s }: { s: Store }) {
+  const [bench, setBench] = useState(BENCHMARKS[0].symbol);
+  const [range, setRange] = useState<Range>('1Y');
+  const c = useMemo(() => compareWithBenchmark(s.portfolio.history, s.portfolio.dividends, s.market[bench], addDays(s.today, -RANGES[range])),
+    [s.portfolio.history, s.portfolio.dividends, s.market, bench, range, s.today]);
+  const label = BENCHMARKS.find((b) => b.symbol === bench)!.label;
+  const mine = c ? c.portfolio[c.portfolio.length - 1] : 0;
+  const theirs = c ? c.benchmark[c.benchmark.length - 1] : 0;
+  return (
+    <Card title="Total return vs benchmark" className="span-2" action={
+      <div className="btn-row">
+        <Segmented label="Benchmark" value={bench} onChange={setBench} options={BENCHMARKS.map((b) => ({ value: b.symbol, label: b.symbol }))} />
+        <Segmented label="Range" value={range} onChange={setRange} options={(Object.keys(RANGES) as Range[]).map((r) => ({ value: r, label: r }))} />
+      </div>
+    }>
+      {c ? (
+        <>
+          <p className="bench-head">
+            You: <b className={mine >= 0 ? 'up' : 'down'}>{signedPct(mine, 1)}</b>
+            <span className="dot-sep" />
+            {label}: <b className={theirs >= 0 ? 'up' : 'down'}>{signedPct(theirs, 1)}</b>
+            <span className="muted"> · {mine >= theirs ? 'ahead' : 'behind'} by {pct(Math.abs(mine - theirs), 1)}, dividends included</span>
+          </p>
+          <LineChart label={`Your total return compared with ${label}`} xLabels={c.dates} format={(n) => signedPct(n, 1)} axisFormat={(n) => `${Math.round(n)}%`} series={[
+            { key: 'you', label: 'You', color: 'var(--series-1)', values: c.portfolio },
+            { key: 'bench', label, color: 'var(--ink-3)', values: c.benchmark, dashed: true },
+          ]} />
+          <Legend items={[{ label: 'Your portfolio', color: 'var(--series-1)' }, { label: `${label}, dividends reinvested`, color: 'var(--ink-3)', dashed: true }]} />
+          <p className="footnote">Time-weighted, so deposits and withdrawals don't count as gains. Based on your daily value history; a sale's gain or loss shows on the day it happens.</p>
+        </>
+      ) : <p className="muted">{s.market[bench]?.closes?.length ? 'Needs a few days of value history. It builds up with each daily sync.' : 'Needs market data for the benchmark, which arrives with the next market refresh.'}</p>}
+    </Card>
   );
 }

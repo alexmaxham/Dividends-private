@@ -25,6 +25,7 @@ describe.runIf(emulator)('firestore.rules', () => {
       await setDoc(doc(db, 'users/linked'), { settings: {}, accounts: [{ itemId: 'i1', institution: 'Robinhood' }] });
       await setDoc(doc(db, 'users/linked/portfolio/current'), { source: 'plaid', holdings: [] });
       await setDoc(doc(db, 'plaidItems/i1'), { uid: 'linked', accessToken: 'access-secret' });
+      await setDoc(doc(db, 'market/KO'), { symbol: 'KO', dividends: [] });
     });
   });
 
@@ -38,6 +39,12 @@ describe.runIf(emulator)('firestore.rules', () => {
     await assertFails(getDoc(doc(as(null), 'users/alice')));
   });
 
+  it('shares market data with signed-in people, read-only', async () => {
+    await assertSucceeds(getDoc(doc(as('alice'), 'market/KO')));
+    await assertFails(getDoc(doc(as(null), 'market/KO')));
+    await assertFails(setDoc(doc(as('alice'), 'market/KO'), { symbol: 'KO', dividends: [{ amount: 99 }] }));
+  });
+
   it('never exposes Plaid access tokens', async () => {
     await assertFails(getDoc(doc(as('linked'), 'plaidItems/i1')));
     await assertFails(setDoc(doc(as('linked'), 'plaidItems/i2'), { uid: 'linked', accessToken: 'x' }));
@@ -47,6 +54,12 @@ describe.runIf(emulator)('firestore.rules', () => {
     await assertSucceeds(updateDoc(doc(as('alice'), 'users/alice'), { settings: { monthlyGoal: 750, taxRate: 15 } }));
     await assertFails(updateDoc(doc(as('alice'), 'users/alice'), { settings: { monthlyGoal: -1 } }));
     await assertFails(updateDoc(doc(as('alice'), 'users/alice'), { settings: { admin: true } }));
+    await assertSucceeds(updateDoc(doc(as('alice'), 'users/alice'), {
+      settings: { monthlyGoal: 750, taxRate: 15, ordinaryTaxRate: 24, watchlist: ['VYM', 'HD'], notify: { email: true, push: false, payments: true, raises: true, reconnect: true, weekly: false } },
+    }));
+    await assertFails(updateDoc(doc(as('alice'), 'users/alice'), { settings: { notify: { email: 'yes' } } }));
+    await assertFails(updateDoc(doc(as('alice'), 'users/alice'), { settings: { notify: { sms: true } } }));
+    await assertFails(updateDoc(doc(as('alice'), 'users/alice'), { settings: { watchlist: Array.from({ length: 51 }, (_, i) => `S${i}`) } }));
     await assertFails(updateDoc(doc(as('alice'), 'users/alice'), { accounts: [] }));
     await assertFails(updateDoc(doc(as('alice'), 'users/alice'), { sync: { lastSync: 'x' } }));
     await assertSucceeds(setDoc(doc(as('carol'), 'users/carol'), { settings: { monthlyGoal: 100 } }));

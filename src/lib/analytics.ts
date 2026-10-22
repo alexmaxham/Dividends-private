@@ -1,4 +1,4 @@
-import type { Dividend, Frequency, Holding, HoldingStats, Payout, Portfolio } from './types';
+import type { Dividend, Frequency, Holding, HoldingStats, Market, MarketDividend, MarketInfo, Payout, Portfolio } from './types';
 
 // ───────────── Dates (calendar dates as YYYY-MM-DD, handled in UTC so time zones never shift a day) ─────────────
 
@@ -76,16 +76,44 @@ export interface Pattern {
   received: number;
 }
 
-export function dividendPattern(holding: Holding, dividends: Dividend[], today: string): Pattern {
+const FREQ_BY_COUNT: Record<number, Frequency> = { 12: 'monthly', 4: 'quarterly', 2: 'semiannual', 1: 'annual' };
+
+/** Regular (not special) dividends from market data, oldest first. */
+export function regularDividends(info: MarketInfo | undefined): MarketDividend[] {
+  return (info?.dividends ?? []).filter((d) => !d.special && d.amount > 0).sort((a, b) => a.exDate.localeCompare(b.exDate));
+}
+
+export function dividendPattern(holding: Holding, dividends: Dividend[], today: string, info?: MarketInfo): Pattern {
   const mine = dividends.filter((d) => d.symbol === holding.symbol && counted(d) && d.rate > 0)
     .sort((a, b) => a.payDate.localeCompare(b.payDate));
+  const received = mine.filter(isReceived).reduce((s, d) => s + d.amount, 0);
+  const ownLast = mine[mine.length - 1];
+
+  // Announced amounts from market data beat rates rebuilt from your own payments: they include a raise as soon as
+  // it's declared, cover holdings that haven't paid you yet, and aren't thrown off by splits.
+  const market = regularDividends(info).filter((d) => daysBetween(d.exDate, today) <= 460);
+  if (market.length) {
+    const last = market[market.length - 1];
+    const frequency = (last.frequency && FREQ_BY_COUNT[last.frequency]) || detectFrequency(market.map((d) => d.exDate), holding, last.amount);
+    const periods = PERIODS[frequency === 'none' ? 'quarterly' : frequency];
+    const target = addDays(last.exDate, -365);
+    const prior = regularDividends(info).filter((d) => Math.abs(daysBetween(d.exDate, target)) <= 45)
+      .sort((a, b) => Math.abs(daysBetween(a.exDate, target)) - Math.abs(daysBetween(b.exDate, target)))[0];
+    const payDates = [ownLast?.payDate, ...market.map((d) => d.payDate)].filter(Boolean) as string[];
+    return {
+      frequency: frequency === 'none' ? 'quarterly' : frequency, annualPerShare: last.amount * periods,
+      lastPayDate: payDates.sort().at(-1) ?? null, lastRate: last.amount,
+      growth: prior ? (last.amount / prior.amount - 1) * 100 : null, received,
+    };
+  }
+
   // Only the last ~15 months describe the current schedule; older ones can predate a policy change.
   const recent = mine.filter((d) => daysBetween(d.payDate, today) <= 460);
-  const last = mine[mine.length - 1];
+  const last = ownLast;
   const frequency = detectFrequency(recent.map((d) => d.payDate), holding, last?.rate);
   let annualPerShare = 0;
   if (recent.length && frequency !== 'none') annualPerShare = last.rate * PERIODS[frequency];
-  else if (holding.dividendYield > 0) annualPerShare = (holding.dividendYield / 100) * holding.price;
+  else if (holding.dividendYield > 0 && !(info && !recent.length)) annualPerShare = (holding.dividendYield / 100) * holding.price;
 
   let growth: number | null = null;
   if (last) {
@@ -94,11 +122,88 @@ export function dividendPattern(holding: Holding, dividends: Dividend[], today: 
       .sort((a, b) => Math.abs(daysBetween(a.payDate, target)) - Math.abs(daysBetween(b.payDate, target)))[0];
     if (prior && prior.rate > 0) growth = (last.rate / prior.rate - 1) * 100;
   }
-  const received = mine.filter(isReceived).reduce((s, d) => s + d.amount, 0);
   return {
     frequency: annualPerShare > 0 ? (frequency === 'none' ? 'quarterly' : frequency) : 'none',
     annualPerShare, lastPayDate: last?.payDate ?? null, lastRate: last?.rate ?? 0, growth, received,
   };
+}
+
+// ───────────── Market data and accounts ─────────────
+
+/** Prices during the day, where a quote is newer than the last brokerage sync. */
+export function withMarketPrices(p: Portfolio, market: Market): Portfolio {
+  if (!Object.keys(market).length) return p;
+  const synced = p.syncedAt ? Date.parse(p.syncedAt) : 0;
+  let changed = false;
+  const holdings = p.holdings.map((h) => {
+    const q = market[h.symbol]?.quote;
+    if (!q || Date.parse(q.at) <= synced || !(q.price > 0)) return h;
+    changed = true;
+    return { ...h, price: q.price, prevClose: q.prevClose || h.prevClose };
+  });
+  return changed ? { ...p, holdings } : p;
+}
+
+/** Just one brokerage account's holdings, dividends and history. */
+export function forAccount(p: Portfolio, account: string): Portfolio {
+  if (account === 'all' || !p.accounts?.some((a) => a.id === account)) return p;
+  const holdings = p.holdings.flatMap((h) => {
+    const lot = h.lots?.find((l) => l.account === account);
+    return lot && lot.shares > 0 ? [{ ...h, shares: lot.shares, avgCost: lot.cost / lot.shares, lots: [lot] }] : [];
+  });
+  return {
+    ...p, holdings, cash: 0,
+    dividends: p.dividends.filter((d) => d.account === account),
+    history: p.history.flatMap((s) => (s.byAccount?.[account] ? [{ date: s.date, ...s.byAccount[account] }] : [])),
+  };
+}
+
+export interface AccountTotals { id: string; value: number; cost: number; income: number }
+
+/** Value, cost and forward income in each brokerage account. */
+export function accountBreakdown(holdings: HoldingStats[], accounts: { id: string }[]): AccountTotals[] {
+  const by = new Map(accounts.map((a) => [a.id, { id: a.id, value: 0, cost: 0, income: 0 }]));
+  for (const h of holdings) {
+    for (const l of h.lots ?? []) {
+      const t = by.get(l.account);
+      if (!t) continue;
+      t.value += l.shares * h.price;
+      t.cost += l.cost;
+      t.income += l.shares * h.annualPerShare;
+    }
+  }
+  return [...by.values()];
+}
+
+/** The trading day you need to buy by to get a dividend: the weekday before the ex-dividend date. */
+export function buyBy(exDate: string): string {
+  let d = addDays(exDate, -1);
+  while ([0, 6].includes(toDate(d).getUTCDay())) d = addDays(d, -1);
+  return d;
+}
+
+export interface ExDate {
+  symbol: string;
+  exDate: string;
+  buyBy: string;
+  payDate: string | null;
+  /** Per share. */
+  amount: number;
+  /** For the shares you hold now. */
+  income: number;
+}
+
+/** Announced ex-dividend dates in the next `days` days for these symbols. */
+export function upcomingExDates(holdings: { symbol: string; shares: number }[], market: Market, today: string, days = 30): ExDate[] {
+  const until = addDays(today, days);
+  const out: ExDate[] = [];
+  for (const h of holdings) {
+    for (const d of market[h.symbol]?.dividends ?? []) {
+      if (d.exDate < today || d.exDate > until) continue;
+      out.push({ symbol: h.symbol, exDate: d.exDate, buyBy: buyBy(d.exDate), payDate: d.payDate, amount: d.amount, income: d.amount * h.shares });
+    }
+  }
+  return out.sort((a, b) => a.exDate.localeCompare(b.exDate) || b.income - a.income);
 }
 
 // ───────────── Portfolio stats ─────────────
@@ -123,9 +228,9 @@ export interface Totals {
   payingCount: number;
 }
 
-export function computeStats(p: Portfolio, today = todayIso()): { holdings: HoldingStats[]; totals: Totals } {
+export function computeStats(p: Portfolio, today = todayIso(), market: Market = {}): { holdings: HoldingStats[]; totals: Totals } {
   const base = p.holdings.map((h) => {
-    const pat = dividendPattern(h, p.dividends, today);
+    const pat = dividendPattern(h, p.dividends, today, market[h.symbol]);
     const value = h.shares * h.price;
     const cost = h.shares * h.avgCost;
     return {
@@ -170,13 +275,22 @@ export function computeStats(p: Portfolio, today = todayIso()): { holdings: Hold
 
 // ───────────── Upcoming payouts ─────────────
 
-export function projectPayouts(holdings: HoldingStats[], dividends: Dividend[], today: string, months = 12): Payout[] {
+export function projectPayouts(holdings: HoldingStats[], dividends: Dividend[], today: string, months = 12, market: Market = {}): Payout[] {
   const horizon = addMonths(today, months);
   const out: Payout[] = [];
-  const held = new Set(holdings.map((h) => h.symbol));
+  const shares = new Map(holdings.map((h) => [h.symbol, h.shares]));
   for (const d of dividends) {
-    if (d.state === 'pending' && d.payDate >= today && d.payDate <= horizon && held.has(d.symbol)) {
-      out.push({ symbol: d.symbol, date: d.payDate, amount: d.amount, rate: d.rate, kind: 'confirmed' });
+    if (d.state === 'pending' && d.payDate >= today && d.payDate <= horizon && shares.has(d.symbol)) {
+      const m = market[d.symbol]?.dividends.find((x) => x.payDate && Math.abs(daysBetween(x.payDate, d.payDate)) <= 4);
+      out.push({ symbol: d.symbol, date: d.payDate, amount: d.amount, rate: d.rate, kind: 'confirmed', exDate: m?.exDate });
+    }
+  }
+  // Dividends the company has declared, from market data.
+  for (const [symbol, held] of shares) {
+    for (const m of market[symbol]?.dividends ?? []) {
+      if (!m.payDate || m.payDate < today || m.payDate > horizon) continue;
+      if (out.some((p) => p.symbol === symbol && Math.abs(daysBetween(p.date, m.payDate!)) <= 4 && (p.exDate ?? m.exDate) === m.exDate)) continue;
+      out.push({ symbol, date: m.payDate, amount: m.amount * held, rate: m.amount, kind: 'confirmed', exDate: m.exDate });
     }
   }
   for (const h of holdings) {
@@ -190,7 +304,7 @@ export function projectPayouts(holdings: HoldingStats[], dividends: Dividend[], 
     let next = known.length ? addMonths(known[known.length - 1], step) : addMonths(today, Math.max(1, Math.round(step / 2)));
     while (next < today) next = addMonths(next, step);
     for (; next <= horizon; next = addMonths(next, step)) {
-      // Skip a projection the broker has already confirmed (dates drift a few days between years).
+      // Skip a projection that's already been announced (dates drift a few days between years).
       if (confirmed.some((c) => Math.abs(daysBetween(c, next)) < (step * 30) / 2)) continue;
       out.push({ symbol: h.symbol, date: next, amount: rate * h.shares, rate, kind: 'estimated' });
     }

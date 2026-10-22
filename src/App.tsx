@@ -6,10 +6,13 @@ import { Holdings } from './components/Holdings';
 import { Insights } from './components/Insights';
 import { Overview } from './components/Overview';
 import { Planner } from './components/Planner';
+import { Taxes } from './components/Taxes';
+import { Watchlist } from './components/Watchlist';
 import { AuthScreen } from './components/AuthScreen';
 import { linkWithPlaid, resumeOAuthLink, Settings } from './components/Settings';
 import { clearOAuthReturn, pendingOAuthReturn } from './lib/plaidLink';
 import { Card, Icon, PrivacyContext } from './components/ui';
+import { accountLabel } from './lib/accounts';
 import { relativeTime } from './lib/format';
 import { useStore } from './useStore';
 
@@ -20,6 +23,8 @@ const TABS = [
   { id: 'calendar', label: 'Calendar', icon: 'calendar' },
   { id: 'insights', label: 'Insights', icon: 'pie' },
   { id: 'planner', label: 'Planner', icon: 'trend' },
+  { id: 'watchlist', label: 'Watchlist', icon: 'star' },
+  { id: 'taxes', label: 'Taxes', icon: 'receipt' },
   { id: 'settings', label: 'Settings', icon: 'gear' },
 ] as const;
 type Tab = (typeof TABS)[number]['id'];
@@ -155,13 +160,23 @@ export function App() {
         )}
 
         <main>
-          <h1 className="page-title">{TABS.find((t) => t.id === tab)?.label}</h1>
+          <div className="page-head">
+            <h1 className="page-title">{TABS.find((t) => t.id === tab)?.label}</h1>
+            {s.accounts.length > 1 && !['settings', 'taxes', 'watchlist'].includes(tab) && (
+              <select className="glass-chip select account-pick" value={s.account} onChange={(e) => s.updateSettings({ account: e.target.value })} aria-label="Account">
+                <option value="all">All accounts</option>
+                {s.accounts.map((a) => <option key={a.id} value={a.id}>{accountLabel(a)}</option>)}
+              </select>
+            )}
+          </div>
           {tab === 'overview' && (isEmpty ? <Welcome s={s} goTo={go} /> : <Overview s={s} openHolding={open} goTo={go} />)}
           {tab === 'holdings' && <Holdings s={s} openHolding={open} />}
           {tab === 'dividends' && <Dividends s={s} openHolding={open} />}
           {tab === 'calendar' && <Calendar s={s} openHolding={open} />}
           {tab === 'insights' && <Insights s={s} openHolding={open} />}
           {tab === 'planner' && <Planner s={s} />}
+          {tab === 'watchlist' && <Watchlist s={s} openHolding={open} />}
+          {tab === 'taxes' && <Taxes s={s} openHolding={open} />}
           {tab === 'settings' && <Settings s={s} />}
         </main>
       </div>

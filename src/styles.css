@@ -388,7 +388,12 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ───────────── Responsive ───────────── */
-@media (max-width: 1180px) {
+@media (max-width: 1400px) {
+  .tabs { gap: 0; }
+  .tabs a { padding: 7px 8px; gap: 5px; font-size: 13px; }
+  .tabs a svg { width: 16px; height: 16px; }
+}
+@media (max-width: 1220px) {
   .tabs a span { display: none; }
   .tabs a { padding: 8px 11px; }
 }
@@ -549,3 +554,78 @@ body.menu-open { overflow: hidden; }
 .small-link { font-size: 12.5px; }
 .limit-note { margin: -4px 0 0; padding: 9px 12px; border-radius: 12px; font-size: 13px; color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
 .tax-note { margin: 0; }
+
+/* ───────────── Market data ───────────── */
+.cal-ex { font-weight: 500; color: var(--ink-3); font-size: 11.5px; margin-left: 4px; }
+
+/* ───────────── Accounts ───────────── */
+.page-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.page-head .page-title { margin-right: auto; }
+.account-pick { max-width: 100%; }
+
+/* ───────────── Taxes ───────────── */
+.rate-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 13px; color: var(--ink-2); }
+.rate-chip input { width: 3.2em; background: transparent; border: 0; border-bottom: 1px solid var(--grid); text-align: right; font-weight: 600; color: var(--ink-1); outline: none; padding: 0 2px; }
+.forms-1099 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.form-1099 { border: 1px solid var(--grid); border-radius: 14px; padding: 14px 16px; }
+.form-1099-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.form-1099 dl { margin: 0; display: grid; gap: 6px; }
+.form-1099 dl div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px dashed var(--grid); }
+.form-1099 dt { color: var(--ink-2); font-size: 13.5px; }
+.form-1099 dd { margin: 0; font-weight: 600; }
+.box { display: inline-block; min-width: 24px; padding: 1px 5px; margin-right: 6px; border-radius: 6px; background: var(--fill-chip); font-size: 11px; font-weight: 700; text-align: center; color: var(--ink-1); }
+
+/* ───────────── Notifications ───────────── */
+.topic-list { display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--grid); }
+
+/* ───────────── Watchlist ───────────── */
+.watch-list li { display: grid; align-items: center; grid-template-columns: auto minmax(120px, 1fr) repeat(4, minmax(84px, auto)) auto; }
+.watch-cell { display: grid; text-align: right; line-height: 1.25; }
+.watch-cell span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); }
+.watch-cell small { font-size: 12px; color: var(--ink-3); }
+.watch-cell small.up { color: var(--up); }
+.watch-cell small.down { color: var(--down); }
+.whatif-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 14px; }
+.whatif-form label { display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.whatif-form .input-affix { min-width: 140px; }
+@media (max-width: 860px) {
+  .watch-list li { display: grid; align-items: center; grid-template-columns: auto minmax(0, 1fr) auto auto; }
+  .watch-list .watch-cell.wide-only { display: none; }
+}
+
+/* ───────────── Milestones ───────────── */
+.milestone-head { margin: 0 0 12px; }
+.milestones { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.milestones li { position: relative; display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--grid); color: var(--ink-2); }
+.milestones li small { grid-column: 2; }
+.ms-icon { grid-row: span 2; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--fill-chip); }
+.ms-label { font-weight: 600; font-size: 13.5px; }
+.milestones li.done { color: var(--ink-1); border-color: color-mix(in srgb, var(--up) 40%, transparent); }
+.milestones li.done .ms-icon { background: color-mix(in srgb, var(--up) 22%, transparent); color: var(--up); }
+.milestones li.next { color: var(--ink-1); border-color: color-mix(in srgb, var(--series-1) 55%, transparent); }
+.ms-bar { grid-column: 1 / -1; height: 4px; margin-top: 8px; border-radius: 999px; background: var(--track); overflow: hidden; }
+.ms-bar i { display: block; height: 100%; background: var(--series-1); border-radius: 999px; }
+.bench-head { margin: 0 0 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* ───────────── Year in review ───────────── */
+.review { display: grid; gap: 14px; }
+.review > select { justify-self: start; }
+.review-total { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font-size: 40px; font-weight: 700; letter-spacing: -0.02em; color: var(--accent); }
+.review-total small { font-size: 15px; font-weight: 600; }
+.watch-cell b, .watch-cell b .num { font-size: 15px; font-weight: 650; color: var(--ink-1); }
+.whatif-sub { font-size: 13px; color: var(--ink-2); font-weight: 600; margin: 16px 0 4px; }
+@media (max-width: 520px) {
+  .milestones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .milestones li { padding: 8px 10px; column-gap: 8px; }
+  .ms-icon { width: 26px; height: 26px; }
+}
+
+/* ───────────── Sign-in options ───────────── */
+.or { display: flex; align-items: center; gap: 10px; color: var(--ink-3); font-size: 12px; }
+.or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--grid); }
+.google-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+.totp-setup { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: start; }
+.totp-setup img { width: 168px; height: 168px; border-radius: 12px; background: #fff; padding: 8px; }
+.totp-key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; padding: 8px 10px; border-radius: 10px; background: var(--fill-chip); user-select: all; }
+@media (max-width: 520px) { .totp-setup { grid-template-columns: 1fr; } }
+.signin-options { padding-top: 12px; border-top: 1px solid var(--grid); }

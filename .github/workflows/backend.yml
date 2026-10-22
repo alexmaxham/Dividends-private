@@ -5,6 +5,8 @@ name: Deploy backend
 #   Variable  FIREBASE_PROJECT_ID         the Firebase project ID
 #   Secret    FIREBASE_SERVICE_ACCOUNT    JSON key of a service account allowed to deploy (see README)
 #   Secrets   PLAID_CLIENT_ID, PLAID_SECRET   copied into Google Secret Manager on each deploy
+#   Optional secrets  MARKET_API_KEY, FINNHUB_API_KEY, RESEND_API_KEY, VAPID_PRIVATE_KEY  (features stay off without them)
+#   Optional variables  VAPID_PUBLIC_KEY, EMAIL_FROM
 on:
   push:
     branches: [main]
@@ -71,17 +73,40 @@ jobs:
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-      - name: Store Plaid keys in Secret Manager
+      - name: Store keys in Secret Manager
         if: steps.ready.outputs.go == 'true'
         env:
           PLAID_CLIENT_ID: ${{ secrets.PLAID_CLIENT_ID }}
           PLAID_SECRET: ${{ secrets.PLAID_SECRET }}
+          MARKET_API_KEY: ${{ secrets.MARKET_API_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
         run: |
+          set_secret() { printf '%s' "$2" | npx --prefix functions firebase functions:secrets:set "$1" --data-file - --project "$PROJECT" --non-interactive --force; }
           for name in PLAID_CLIENT_ID PLAID_SECRET; do
             value="${!name}"
             if [ -z "$value" ]; then echo "::warning::$name isn't set as a repository secret; keeping the value already in Secret Manager."; continue; fi
-            printf '%s' "$value" | npx --prefix functions firebase functions:secrets:set "$name" --data-file - --project "$PROJECT" --non-interactive --force
+            set_secret "$name" "$value"
           done
+          # Optional features. A function can't deploy without its secret, so a missing one gets the placeholder
+          # "none", which the functions treat as "turned off".
+          for name in MARKET_API_KEY FINNHUB_API_KEY RESEND_API_KEY VAPID_PRIVATE_KEY; do
+            value="${!name}"
+            if [ -n "$value" ]; then set_secret "$name" "$value"; continue; fi
+            if npx --prefix functions firebase functions:secrets:access "$name" --project "$PROJECT" > /dev/null 2>&1; then continue; fi
+            echo "::notice::$name isn't set; that feature stays off until you add it (see README)."
+            set_secret "$name" none
+          done
+      - name: Pass optional settings to the functions
+        if: steps.ready.outputs.go == 'true'
+        env:
+          VAPID_PUBLIC_KEY: ${{ vars.VAPID_PUBLIC_KEY }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+        run: |
+          [ -n "$VAPID_PUBLIC_KEY" ] && echo "VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY" >> functions/.env
+          [ -n "$EMAIL_FROM" ] && echo "EMAIL_FROM=\"$EMAIL_FROM\"" >> functions/.env
+          true
       - name: Deploy rules and functions
         if: steps.ready.outputs.go == 'true'
         run: npx --prefix functions firebase deploy --only firestore,functions --project "$PROJECT" --non-interactive --force
