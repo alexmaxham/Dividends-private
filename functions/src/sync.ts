@@ -4,6 +4,8 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { mergePortfolios, Plaid, PlaidError, type ItemData } from './plaid.js';
 
 export const REAUTH_CODES = new Set(['ITEM_LOGIN_REQUIRED', 'PENDING_EXPIRATION', 'PENDING_DISCONNECT']);
+// The link no longer exists at Plaid (for example, made in the sandbox before switching to production).
+export const GONE_CODES = new Set(['INVALID_ACCESS_TOKEN', 'ITEM_NOT_FOUND']);
 const HISTORY_SNAPSHOTS = 3 * 365;
 const LOCK_MS = 5 * 60 * 1000;
 const MANUAL_COOLDOWN_MS = 60 * 1000;
@@ -69,6 +71,10 @@ export async function syncUser(db: Firestore, plaid: Plaid, uid: string, opts: {
         if (e instanceof PlaidError && e.code && REAUTH_CODES.has(e.code)) {
           await doc.ref.update({ needsReauth: true });
           problems.push(`${it.institution} needs you to sign in again (Settings → Reconnect).`);
+          continue;
+        }
+        if (e instanceof PlaidError && e.code && GONE_CODES.has(e.code)) {
+          problems.push(`${it.institution} is no longer connected. Unlink it in Settings and link it again.`);
           continue;
         }
         throw e;

@@ -63,6 +63,14 @@ describe.runIf(emulator)('syncUser', () => {
     expect((await db.doc('users/u1/portfolio/current').get()).data()!.holdings).toHaveLength(1);
   });
 
+  it('skips a link Plaid no longer recognizes and keeps syncing the others', async () => {
+    await db.doc('plaidItems/i2').set({ uid: 'u1', accessToken: 'sandbox-old', institution: 'First Platypus Bank', institutionId: null, linkedAt: '2026-10-02T00:00:00Z', needsReauth: false });
+    await syncUser(db, fakePlaid({ 'sandbox-old': { '/investments/holdings/get': 'INVALID_ACCESS_TOKEN' } }), 'u1');
+    const user = (await db.doc('users/u1').get()).data()!;
+    expect(user.sync.lastError).toMatch(/First Platypus Bank is no longer connected/);
+    expect((await db.doc('users/u1/portfolio/current').get()).data()!.holdings).toHaveLength(1);
+  });
+
   it('rate-limits manual syncs and blocks overlapping ones', async () => {
     const now = new Date('2026-10-21T15:00:00Z');
     await syncUser(db, fakePlaid(), 'u1', { now });
