@@ -388,7 +388,7 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ───────────── Responsive ───────────── */
-@media (max-width: 1180px) {
+@media (max-width: 1360px) {
   .tabs a span { display: none; }
   .tabs a { padding: 8px 11px; }
 }
@@ -572,3 +572,18 @@ body.menu-open { overflow: hidden; }
 
 /* ───────────── Notifications ───────────── */
 .topic-list { display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--grid); }
+
+/* ───────────── Watchlist ───────────── */
+.watch-list li { display: grid; align-items: center; grid-template-columns: auto minmax(120px, 1fr) repeat(4, minmax(84px, auto)) auto; }
+.watch-cell { display: grid; text-align: right; line-height: 1.25; }
+.watch-cell span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); }
+.watch-cell small { font-size: 12px; color: var(--ink-3); }
+.watch-cell small.up { color: var(--up); }
+.watch-cell small.down { color: var(--down); }
+.whatif-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 14px; }
+.whatif-form label { display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.whatif-form .input-affix { min-width: 140px; }
+@media (max-width: 860px) {
+  .watch-list li { display: grid; align-items: center; grid-template-columns: auto minmax(0, 1fr) auto auto; }
+  .watch-list .watch-cell.wide-only { display: none; }
+}

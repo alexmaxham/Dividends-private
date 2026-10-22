@@ -41,7 +41,9 @@ function barPath(x: number, y: number, w: number, h: number, r = 4): string {
 
 // ───────────── Monthly income: received vs projected ─────────────
 
-export function IncomeBars({ data, goal, height = 240 }: { data: MonthBar[]; goal?: number; height?: number }) {
+export function IncomeBars({ data, goal, height = 240, labels = { solid: 'Received', hatched: 'Expected' }, label = 'Monthly dividend income, received and projected' }: {
+  data: MonthBar[]; goal?: number; height?: number; labels?: { solid: string; hatched: string }; label?: string;
+}) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const hidden = useContext(PrivacyContext);
   const [hover, setHover] = useState<number | null>(null);
@@ -59,7 +61,7 @@ export function IncomeBars({ data, goal, height = 240 }: { data: MonthBar[]; goa
 
   return (
     <div className="chart" ref={ref} onMouseLeave={() => setHover(null)}>
-      <svg width={width} height={height} role="img" aria-label="Monthly dividend income, received and projected">
+      <svg width={width} height={height} role="img" aria-label={label}>
         <defs>
           <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <rect width="6" height="6" fill="var(--series-1)" opacity="0.28" />
@@ -102,8 +104,8 @@ export function IncomeBars({ data, goal, height = 240 }: { data: MonthBar[]; goa
       {h && hover !== null && (
         <Tooltip x={pad.l + hover * slot + slot / 2} y={y(h.received + h.projected) - 10} width={width}>
           <strong>{monthLong(h.month)}</strong>
-          {h.received > 0 && <div><i className="sw solid" />Received <b>{hidden ? '•••' : money(h.received)}</b></div>}
-          {h.projected > 0 && <div><i className="sw hatch" />Expected <b>{hidden ? '•••' : money(h.projected)}</b></div>}
+          {h.received > 0 && <div><i className="sw solid" />{labels.solid} <b>{hidden ? '•••' : money(h.received)}</b></div>}
+          {h.projected > 0 && <div><i className="sw hatch" />{labels.hatched} <b>{hidden ? '•••' : money(h.projected)}</b></div>}
           {h.received + h.projected === 0 && <div className="muted">No payments</div>}
         </Tooltip>
       )}

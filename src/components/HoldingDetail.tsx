@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { buyBy, isReceived } from '../lib/analytics';
+import { buyBy, isReceived, regularDividends } from '../lib/analytics';
+import { symbolSummary } from '../lib/explore';
 import { accountLabel } from '../lib/accounts';
 import { dateLong, dateShort, FREQ_LABEL, money, pct, shares as fmtShares, signedPct } from '../lib/format';
 import type { Store } from '../useStore';
@@ -10,17 +11,22 @@ export function HoldingDetail({ s, symbol, onClose }: { s: Store; symbol: string
   const h = s.holdings.find((x) => x.symbol === symbol);
   const history = useMemo(() => s.portfolio.dividends.filter((d) => d.symbol === symbol && d.state !== 'voided'), [s.portfolio.dividends, symbol]);
   const next = s.payouts.filter((p) => p.symbol === symbol).slice(0, 4);
-  const rates = useMemo(() => [...history].filter(isReceived).reverse().slice(-12)
+  const info = s.market[symbol];
+  const own = useMemo(() => [...history].filter(isReceived).reverse().slice(-12)
     .map((d) => ({ label: dateShort(d.payDate).split(' ')[0], value: d.rate, note: `${dateLong(d.payDate)}: ${money(d.rate)}/share` })), [history]);
+  // Not held, or no payments yet: the company's own record from market data.
+  const rates = own.length > 1 || !info ? own : regularDividends(info).slice(-12)
+    .map((d) => ({ label: dateShort(d.payDate ?? d.exDate).split(' ')[0], value: d.amount, note: `Ex-dividend ${dateLong(d.exDate)}: ${money(d.amount)}/share` }));
+  const watched = !h && info ? symbolSummary(info, s.today) : null;
 
   return (
-    <Modal title={h ? h.name : symbol} onClose={onClose} wide>
+    <Modal title={h ? h.name : info?.name ?? symbol} onClose={onClose} wide>
       <div className="detail-head">
         <Ticker symbol={symbol} size={52} />
         <div>
-          <div className="hero-value small">{h ? <Money v={h.price} /> : '—'}</div>
+          <div className="hero-value small">{h ? <Money v={h.price} /> : watched ? <Money v={watched.price} /> : '—'}</div>
           {h && <div className={h.price >= h.prevClose ? 'up' : 'down'}>{signedPct(h.prevClose ? (h.price / h.prevClose - 1) * 100 : 0)} today · {h.sector}</div>}
-          {!h && <div className="muted">No longer held — dividend history only</div>}
+          {!h && <div className="muted">{watched ? `Not held${s.watchlist.includes(symbol) ? ' · on your watchlist' : ''}` : 'No longer held — dividend history only'}</div>}
         </div>
       </div>
 
@@ -38,6 +44,17 @@ export function HoldingDetail({ s, symbol, onClose }: { s: Store; symbol: string
           <div><span>Dividend growth</span><b className={h.growth == null ? '' : h.growth >= 0 ? 'up' : 'down'}>{h.growth == null ? '—' : `${signedPct(h.growth, 1)} YoY`}</b></div>
           <div><span>Collected so far</span><b><Money v={h.received} /></b></div>
           <div><span>Share of income</span><b className="num">{pct(h.incomeShare * 100, 1)}</b></div>
+        </div>
+      )}
+
+      {watched && (
+        <div className="kv-grid">
+          <div><span>Yield</span><b className="num">{watched.annualPerShare ? pct(watched.yieldPct) : '—'}</b></div>
+          <div><span>Annual / share</span><b><Money v={watched.annualPerShare} /></b></div>
+          <div><span>Pays</span><b>{FREQ_LABEL[watched.frequency]}</b></div>
+          <div><span>Dividend growth</span><b className={watched.growth == null ? '' : watched.growth >= 0 ? 'up' : 'down'}>{watched.growth == null ? '—' : `${signedPct(watched.growth, 1)} YoY`}</b></div>
+          <div><span>Next ex-dividend</span><b>{watched.nextEx ? dateShort(watched.nextEx.exDate) : '—'}</b></div>
+          <div><span>Buy by</span><b>{watched.nextEx ? dateShort(buyBy(watched.nextEx.exDate)) : '—'}</b></div>
         </div>
       )}
 
@@ -83,7 +100,7 @@ export function HoldingDetail({ s, symbol, onClose }: { s: Store; symbol: string
         </section>
       )}
 
-      <section className="detail-section">
+      {!(watched && !history.length) && <section className="detail-section">
         <h3>History</h3>
         {history.length ? (
           <ul className="rows compact scroll">
@@ -96,7 +113,7 @@ export function HoldingDetail({ s, symbol, onClose }: { s: Store; symbol: string
             ))}
           </ul>
         ) : <Empty>No dividends recorded yet.</Empty>}
-      </section>
+      </section>}
     </Modal>
   );
 }
